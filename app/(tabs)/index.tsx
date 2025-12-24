@@ -83,16 +83,17 @@ export default function ScanScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, gap: 16 },
-  card: { padding: 16, borderRadius: 16, gap: 8 },
+  container: { flex: 1, padding: 20 },
+  card: { padding: 16, borderRadius: 16, marginVertical: 8 },
   button: {
     paddingVertical: 18,
     borderRadius: 16,
     alignItems: "center",
     backgroundColor: "#2E6BFF",
+    marginVertical: 8
   },
   secondary: { backgroundColor: "#2A2A38" },
   danger: { backgroundColor: "#C83B3B" },
   buttonText: { color: "white", fontSize: 18, fontWeight: "700" },
-  sub: { opacity: 0.8 },
+  sub: { opacity: 0.8, marginTop: 8 },
 });
