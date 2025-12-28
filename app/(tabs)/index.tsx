@@ -7,6 +7,7 @@ import { ThemedView } from "@/components/themed-view";
 import { mockDetect } from "@/lib/sightline/mockDetector";
 import { speakDetection } from "@/lib/sightline/speak";
 import type { Detection, Verbosity } from "@/lib/sightline/types";
+import { useRouter } from "expo-router";
 
 export default function ScanScreen() {
   const [scanning, setScanning] = useState(false);
@@ -38,11 +39,13 @@ export default function ScanScreen() {
     speakDetection(last, verbosity);
   }
 
+  const router = useRouter();
+
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title">SightLine</ThemedText>
+      <ThemedText type="title">My Eye</ThemedText>
       <ThemedText type="subtitle">
-        Voice-first sign detection and distance estimation
+        Navigate with sign detection
       </ThemedText>
 
       <ThemedView style={styles.card}>
@@ -71,6 +74,15 @@ export default function ScanScreen() {
         <ThemedText style={styles.buttonText}>Repeat Last Announcement</ThemedText>
       </Pressable>
 
+      <Pressable
+        style={[styles.button, styles.secondary]}
+        accessibilityRole = "button"
+        accessibilityLabel = "Navigate"
+        onPress = {()=>router.push("/Navigate")}
+      >
+        <ThemedText style={styles.buttonText}>Navigate</ThemedText>
+      </Pressable>
+
       <ThemedView style={styles.card}>
         <ThemedText type="defaultSemiBold">Latest Detection</ThemedText>
         <ThemedText>
@@ -83,7 +95,7 @@ export default function ScanScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
+  container: { flex: 1, padding: 20, paddingTop: 70 },
   card: { padding: 16, borderRadius: 16, marginVertical: 8 },
   button: {
     paddingVertical: 18,
