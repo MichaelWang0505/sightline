@@ -1,4 +1,5 @@
 import { Audio } from "expo-av";
+import * as Location from "expo-location";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { FlatList, Pressable, StyleSheet } from "react-native";
@@ -10,22 +11,35 @@ export default function NavigateScreen() {
   const [listening, setListening] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
+  const [userLocation, setUserLocation] =
+    useState<Location.LocationObject | null>(null);
 
-  // Ask for mic permission
+  // Ask for mic + location permission
   useEffect(() => {
-    Audio.requestPermissionsAsync();
+    (async () => {
+      await Audio.requestPermissionsAsync();
+
+      const { status } =
+        await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        console.warn("Location permission denied");
+        return;
+      }
+
+      const loc = await Location.getCurrentPositionAsync({});
+      setUserLocation(loc);
+    })();
   }, []);
 
-  // Press-and-hold simulation
   function startListening() {
     setListening(true);
-    setResults([]); // clear previous results
+    setResults([]);
   }
 
   async function stopListening() {
     setListening(false);
 
-    // 🔴 TEMP: simulate speech (replace with real speech later)
+    // TEMP simulated speech
     const spokenText = "library";
     setQuery(spokenText);
 
@@ -33,34 +47,44 @@ export default function NavigateScreen() {
   }
 
   async function searchPlaces(text: string) {
-    const url =
-      `https://nominatim.openstreetmap.org/search` +
-      `?q=${encodeURIComponent(text)}` +
-      `&format=json&addressdetails=1&limit=5`;
+  if (!userLocation) return;
 
-    try {
-      const res = await fetch(url, {
-        headers: {
-          "User-Agent": "Expo-App",
-        },
-      });
+  const { latitude, longitude } = userLocation.coords;
 
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setResults(data);
-      } else {
-        console.warn("Unexpected response format:", data);
-        setResults([]);
-      }
-    } catch (err) {
-      console.error("Failed to fetch locations:", err);
-      setResults([]);
-    }
+  // ~10km box around user
+  const left = longitude - 0.1;
+  const right = longitude + 0.1;
+  const top = latitude + 0.1;
+  const bottom = latitude - 0.1;
+
+  const url =
+    `https://nominatim.openstreetmap.org/search` +
+    `?q=${encodeURIComponent(text)}` +
+    `&format=json&addressdetails=1&limit=5` +
+    `&viewbox=${left},${top},${right},${bottom}` +
+    `&bounded=1`;
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Expo-App",
+      },
+    });
+
+    const raw = await res.text();
+    const data = JSON.parse(raw);
+
+    setResults(Array.isArray(data) ? data : []);
+  } catch (err) {
+    console.error("Nominatim error:", err);
+    setResults([]);
   }
+}
+
 
   function selectLocation(item: any) {
-    console.log("Selected location:", item.display_name);
-    router.back(); // close window
+    console.log("Selected:", item.display_name);
+    router.back();
   }
 
   return (
