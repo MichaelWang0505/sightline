@@ -1,172 +1,139 @@
+import { Audio } from "expo-av";
+import * as Location from "expo-location";
+import { router } from "expo-router";
+import { useEffect, useState } from "react";
+import { FlatList, Pressable, StyleSheet } from "react-native";
+
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import * as Speech from "expo-speech";
-import { useState } from "react";
-import {
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    StyleSheet,
-    TextInput,
-    View,
-} from "react-native";
-
-const palette = {
-  bg: "#0F1220",
-  card: "#191C2B",
-  primary: "#3A7CFF",
-  secondary: "#2D2F3E",
-  textLight: "#FFFFFF",
-  textSub: "#C7CBDA",
-  border: "rgba(255,255,255,0.12)",
-};
 
 export default function NavigateScreen() {
-  const [destination, setDestination] = useState("");
+  const [listening, setListening] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<any[]>([]);
+  const [userLocation, setUserLocation] =
+    useState<Location.LocationObject | null>(null);
 
-  function speak(text: string) {
-    Speech.speak(text, {
-      language: "en-US",
-      pitch: 1,
-      rate: 1,
-    });
+  // Ask for mic + location permission
+  useEffect(() => {
+    (async () => {
+      await Audio.requestPermissionsAsync();
+
+      const { status } =
+        await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        console.warn("Location permission denied");
+        return;
+      }
+
+      const loc = await Location.getCurrentPositionAsync({});
+      setUserLocation(loc);
+    })();
+  }, []);
+
+  function startListening() {
+    setListening(true);
+    setResults([]);
   }
 
-  function handleStart() {
-    const trimmed = destination.trim();
+  async function stopListening() {
+    setListening(false);
 
-    if (!trimmed) {
-      speak("Please enter where you want to go.");
-      return;
-    }
+    // TEMP simulated speech
+    const spokenText = "library";
+    setQuery(spokenText);
 
-    // For now this is just a confirmation + placeholder.
-    speak(`Starting guidance to ${trimmed}. Navigation will update as you move.`);
+    await searchPlaces(spokenText);
+  }
+
+  async function searchPlaces(text: string) {
+  if (!userLocation) return;
+
+  const { latitude, longitude } = userLocation.coords;
+
+  // ~10km box around user
+  const left = longitude - 0.1;
+  const right = longitude + 0.1;
+  const top = latitude + 0.1;
+  const bottom = latitude - 0.1;
+
+  const url =
+    `https://nominatim.openstreetmap.org/search` +
+    `?q=${encodeURIComponent(text)}` +
+    `&format=json&addressdetails=1&limit=5` +
+    `&viewbox=${left},${top},${right},${bottom}` +
+    `&bounded=1`;
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Expo-App",
+      },
+    });
+
+    const raw = await res.text();
+    const data = JSON.parse(raw);
+
+    setResults(Array.isArray(data) ? data : []);
+  } catch (err) {
+    console.error("Nominatim error:", err);
+    setResults([]);
+  }
+}
+
+
+  function selectLocation(item: any) {
+    console.log("Selected:", item.display_name);
+    router.back();
   }
 
   return (
-    <ThemedView style={styles.screen}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <ThemedView style={styles.container}>
+      <ThemedText type="title">Navigate</ThemedText>
+
+      <Pressable
+        style={[styles.mic, listening && styles.active]}
+        onPressIn={startListening}
+        onPressOut={stopListening}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <ThemedText type="title" style={styles.headerTitle}>
-            Navigation
-          </ThemedText>
-          <ThemedText style={styles.headerSub}>
-            Tell SightLine where you want to go. We’ll use this in combination
-            with detected signs and landmarks.
-          </ThemedText>
-        </View>
-
-        {/* Input card */}
-        <ThemedView style={styles.card}>
-          <ThemedText style={styles.label}>
-            Destination
-          </ThemedText>
-
-          <TextInput
-            value={destination}
-            onChangeText={setDestination}
-            placeholder="Example: main entrance, room 204, cafeteria"
-            placeholderTextColor="rgba(199,203,218,0.7)"
-            style={styles.input}
-            returnKeyType="done"
-            onSubmitEditing={handleStart}
-            accessibilityLabel="Destination"
-            accessibilityHint="Type where you want to go, then press the Start navigation button."
-          />
-
-          <ThemedText style={styles.helper}>
-            Use short, simple phrases like “front desk”, “bus stop”, or
-            “elevator lobby”. A screen reader will announce the field and the
-            button below.
-          </ThemedText>
-        </ThemedView>
-
-        {/* Start navigation button */}
-        <Pressable
-          style={styles.button}
-          onPress={handleStart}
-          accessibilityRole="button"
-          accessibilityLabel="Start navigation"
-          accessibilityHint="SightLine will confirm your destination and begin guidance."
-        >
-          <ThemedText style={styles.buttonText}>
-            Start Navigation
-          </ThemedText>
-        </Pressable>
-
-        {/* Safety note */}
-        <ThemedText style={styles.safety}>
-          Navigation is an assistive aid and may be imperfect. Always confirm
-          your surroundings with your cane, guide dog, or orientation skills.
+        <ThemedText>
+          {listening ? "Listening..." : "Hold to Speak"}
         </ThemedText>
-      </KeyboardAvoidingView>
+      </Pressable>
+
+      {query !== "" && (
+        <ThemedText>Searching for: "{query}"</ThemedText>
+      )}
+
+      <FlatList
+        data={results}
+        keyExtractor={(item) => item.place_id.toString()}
+        renderItem={({ item }) => (
+          <Pressable
+            style={styles.item}
+            onPress={() => selectLocation(item)}
+          >
+            <ThemedText>{item.display_name}</ThemedText>
+          </Pressable>
+        )}
+      />
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    padding: 22,
-    gap: 16,
-  },
-  header: {
-    gap: 6,
-    marginBottom: 8,
-  },
-  headerTitle: {
-    color: palette.textLight,
-  },
-  headerSub: {
-    color: palette.textSub,
-    lineHeight: 20,
-  },
-  card: {
-    backgroundColor: palette.card,
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: palette.border,
-    gap: 10,
-  },
-  label: {
-    color: palette.textLight,
-    fontWeight: "600",
-  },
-  input: {
+  container: { flex: 1, padding: 20 },
+  mic: {
+    marginVertical: 20,
+    padding: 20,
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: palette.secondary,
-    color: palette.textLight,
-    fontSize: 16,
-  },
-  helper: {
-    color: palette.textSub,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  button: {
-    marginTop: 18,
-    borderRadius: 18,
-    paddingVertical: 16,
+    backgroundColor: "#ddd",
     alignItems: "center",
-    backgroundColor: palette.primary,
   },
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  safety: {
-    marginTop: 12,
-    color: palette.textSub,
-    fontSize: 11,
-    lineHeight: 17,
+  active: { backgroundColor: "#ffcccc" },
+  item: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderColor: "#ccc",
   },
 });

@@ -69,21 +69,9 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     <ThemedView style={[styles.container]}>
       {/* Header */}
       <View style={styles.header}>
-        <ThemedText type="title" style={{ color: palette.textLight }}>
-          SightLine
-        </ThemedText>
-        <ThemedText type="subtitle" style={{ color: palette.textSub }}>
-          AI sign detection & distance awareness
+        <ThemedText type="subtitle" style={{ color: palette.textLight }}>
         </ThemedText>
       </View>
-
-      {/* Card: Status */}
-      <ThemedView style={styles.card}>
-        <ThemedText type="defaultSemiBold" style={{ color: palette.textLight }}>
-          {statusText}
-        </ThemedText>
-        <ThemedText style={{ color: palette.textSub }}>{statusSub}</ThemedText>
-      </ThemedView>
 
       {/* Buttons */}
       <Pressable
@@ -96,6 +84,14 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
           {scanning ? "Stop Scanning" : "Start Scanning"}
         </ThemedText>
       </Pressable>
+
+      {/* Card: Status */}
+      <ThemedView style={styles.card}>
+        <ThemedText type="defaultSemiBold" style={{ color: palette.textLight }}>
+          {statusText}
+        </ThemedText>
+        <ThemedText style={{ color: palette.textSub }}>{statusSub}</ThemedText>
+      </ThemedView>
 
       <Pressable
         style={[styles.button, styles.secondary]}
