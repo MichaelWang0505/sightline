@@ -78,7 +78,7 @@ export default function ScanScreen() {
         style={[styles.button, styles.secondary]}
         accessibilityRole = "button"
         accessibilityLabel = "Navigate"
-        onPress={() => router.push("/modal/_Navigate")}
+        onPress={() => router.push("/modal")}
       >
         <ThemedText style={styles.buttonText}>Navigate</ThemedText>
       </Pressable>

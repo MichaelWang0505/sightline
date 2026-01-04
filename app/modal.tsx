@@ -13,6 +13,7 @@ export default function NavigateScreen() {
   const [results, setResults] = useState<any[]>([]);
   const [userLocation, setUserLocation] =
     useState<Location.LocationObject | null>(null);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
 
   // Ask for mic + location permission
   useEffect(() => {
@@ -31,20 +32,100 @@ export default function NavigateScreen() {
     })();
   }, []);
 
-  function startListening() {
-    setListening(true);
-    setResults([]);
+  //listens to user audio input
+ async function startListening() {
+  // Prevent double recordings
+  if (recording) {
+    try {
+      await recording.stopAndUnloadAsync();
+    } catch {}
+    setRecording(null);
   }
+
+  setListening(true);
+  setResults([]);
+
+  const { status } = await Audio.requestPermissionsAsync();
+  if (status !== "granted") {
+    console.warn("Mic permission denied");
+    return;
+  }
+
+  //required for iOS
+  await Audio.setAudioModeAsync({
+    allowsRecordingIOS: true,
+    playsInSilentModeIOS: true,
+  });
+
+  const rec = new Audio.Recording();
+  await rec.prepareToRecordAsync({
+  android: {
+    extension: ".m4a",
+    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+    sampleRate: 44100,
+    numberOfChannels: 2,
+    bitRate: 128000,
+  },
+  ios: {
+  extension: ".m4a",
+  audioQuality: Audio.IOSAudioQuality.HIGH,
+  sampleRate: 44100,
+  numberOfChannels: 1,
+  bitRate: 128000,
+  outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+  },
+  web: {
+    mimeType: "audio/webm",
+    bitsPerSecond: 128000,
+  },
+});
+
+  await rec.startAsync();
+  setRecording(rec);
+}
+
+
 
   async function stopListening() {
-    setListening(false);
+  setListening(false);
 
-    // TEMP simulated speech
-    const spokenText = "library";
-    setQuery(spokenText);
+  if (!recording) return;
 
-    await searchPlaces(spokenText);
-  }
+  await recording.stopAndUnloadAsync();
+  const uri = recording.getURI();
+  console.log("Recording URI:", uri);
+
+  setRecording(null);
+
+  //send audio to backend
+  const text = await sendAudioToBackend(uri!);
+  setQuery(text);
+
+  //searches places with inputted text
+  await searchPlaces(text);
+}
+
+async function sendAudioToBackend(uri: string) {
+  const formData = new FormData();
+  formData.append("audio", {
+    uri,
+    name: "audio.m4a",
+    type: "audio/m4a",
+  } as any);
+  console.log("Sending audio to backend:", uri);
+  const response = await fetch("http://10.0.0.174:3000/api/voice-query", {
+    method: "POST",
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+    body: formData,
+  });
+
+  const data = await response.json();
+  console.log("Backend response:", data);
+  return data.text;
+}
 
   async function searchPlaces(text: string) {
   if (!userLocation) return;
