@@ -4,33 +4,15 @@ import {
   StyleSheet,
   View
 } from "react-native";
-import {
-  Pressable,
-  StyleSheet,
-  View
-} from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 
 import { mockDetect } from "@/lib/sightline/mockDetector";
 import { speakDetection } from "@/lib/sightline/speak";
-import { Detection, Verbosity } from "@/lib/sightline/types";
-
-import { Detection, Verbosity } from "@/lib/sightline/types";
+import type { Detection, Verbosity } from "@/lib/sightline/types";
 
 import { useRouter } from "expo-router";
-
-const palette = {
-  bg: "#0F1220",
-  card: "#191C2B",
-  primary: "#3A7CFF",
-  danger: "#D64545",
-  secondary: "#2D2F3E",
-  textLight: "#FFFFFF",
-  textSub: "#C7CBDA",
-  accent: "#4ADE80",
-};
 
 const palette = {
   bg: "#0F1220",
@@ -46,23 +28,17 @@ const palette = {
 export default function ScanScreen() {
   const router = useRouter();
 
-  const router = useRouter();
-
   const [scanning, setScanning] = useState(false);
   const [verbosity] = useState<Verbosity>("medium");
   const [last, setLast] = useState<Detection | null>(null);
 
-const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   function start() {
     setScanning(true);
 
     timerRef.current = setInterval(() => {
       const d = mockDetect();
-
 
       if (d.confidence < 0.65) return;
 
@@ -76,7 +52,6 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
     setLast(null);
-    setLast(null);
   }
 
   function repeatLast() {
@@ -85,33 +60,20 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   }
 
   const statusText = scanning ? "Scanning for signs…" : "Scanner paused";
-  const statusSub =
-    scanning
-      ? "Keep your phone pointed forward. SightLine will announce signs ahead."
-      : "Tap Start to begin listening for nearby signs.";
-  const statusText = scanning ? "Scanning for signs…" : "Scanner paused";
-  const statusSub =
-    scanning
-      ? "Keep your phone pointed forward. SightLine will announce signs ahead."
-      : "Tap Start to begin listening for nearby signs.";
+  const statusSub = scanning
+    ? "Keep your phone pointed forward. SightLine will announce signs ahead."
+    : "Tap Start to begin listening for nearby signs.";
 
   return (
-    <ThemedView style={[styles.container, {backgroundColor: palette.textLight}]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <ThemedText type="title" style={{ color: palette.bg }}>
-          SightLine
-    <ThemedView style={[styles.container, {backgroundColor: palette.textLight}]}>
+    <ThemedView style={[styles.container, { backgroundColor: palette.textLight }]}>
       {/* Header */}
       <View style={styles.header}>
         <ThemedText type="title" style={{ color: palette.bg }}>
           SightLine
         </ThemedText>
       </View>
-      </View>
 
-      {/* Buttons */}
-      {/* Buttons */}
+      {/* Start/Stop Button */}
       <Pressable
         style={[styles.button, scanning && styles.danger]}
         onPress={scanning ? stop : start}
@@ -132,10 +94,9 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
         <ThemedText style={{ color: palette.textLight }}>
           {last ? `${last.label} — ${last.distance}` : "No detections yet."}
         </ThemedText>
-
       </ThemedView>
 
-      {/* Card: Status */}
+      {/* Status Card */}
       <ThemedView style={styles.card}>
         <ThemedText type="defaultSemiBold" style={{ color: palette.textLight }}>
           {statusText}
@@ -143,54 +104,25 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
         <ThemedText style={{ color: palette.textSub }}>{statusSub}</ThemedText>
       </ThemedView>
 
-      {/* Scanner Status */}
-      <ThemedView style={styles.card}>
-        <ThemedText type="defaultSemiBold" style={{ color: palette.textLight }}>
-          Scanner Status
-        </ThemedText>
-
-        <ThemedText style={{ color: palette.textLight }}>
-          {last ? `${last.label} — ${last.distance}` : "No detections yet."}
-        </ThemedText>
-
-      </ThemedView>
-
-      {/* Card: Status */}
-      <ThemedView style={styles.card}>
-        <ThemedText type="defaultSemiBold" style={{ color: palette.textLight }}>
-          {statusText}
-        </ThemedText>
-        <ThemedText style={{ color: palette.textSub }}>{statusSub}</ThemedText>
-      </ThemedView>
-
+      {/* Repeat Button */}
       <Pressable
         style={[styles.button, styles.secondary]}
         onPress={repeatLast}
         accessibilityRole="button"
         accessibilityLabel="Repeat last announcement"
       >
-        <ThemedText style={styles.buttonText}>
-          
-          Repeat Last Announcement
-        
-        </ThemedText>
+        <ThemedText style={styles.buttonText}>Repeat Last Announcement</ThemedText>
       </Pressable>
 
       {/* Navigate Button */}
-      {/* Navigate Button */}
       <Pressable
         style={[styles.button, styles.secondary]}
-        accessibilityRole = "button"
-        accessibilityLabel = "Navigate"
+        accessibilityRole="button"
+        accessibilityLabel="Navigate"
         onPress={() => router.push("/modal")}
       >
         <ThemedText style={styles.buttonText}>Navigate</ThemedText>
       </Pressable>
-
-
-      
-
-      
     </ThemedView>
   );
 }
@@ -203,22 +135,7 @@ const styles = StyleSheet.create({
   },
   header: {
     gap: 4,
-    paddingTop: 40
-  },
-  card: {
-    padding: 16,
-    borderRadius: 18,
-    backgroundColor: palette.card,
-    gap: 8,
-  },
-  container: {
-    flex: 1,
-    padding: 22,
-    gap: 18,
-  },
-  header: {
-    gap: 4,
-    paddingTop: 40
+    paddingTop: 40,
   },
   card: {
     padding: 16,
@@ -231,22 +148,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     backgroundColor: palette.primary,
-    backgroundColor: palette.primary,
-  },
-  secondary: {
-    backgroundColor: palette.secondary,
-  },
-  danger: {
-    backgroundColor: palette.danger,
-  },
-  buttonText: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  sub: {
-    opacity: 0.85,
-    marginTop: 4,
   },
   secondary: {
     backgroundColor: palette.secondary,
