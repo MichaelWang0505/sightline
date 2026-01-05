@@ -52,6 +52,7 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     setScanning(false);
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
+    setLast(null);
   }
 
   function repeatLast() {
@@ -66,10 +67,11 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
       : "Tap Start to begin listening for nearby signs.";
 
   return (
-    <ThemedView style={[styles.container]}>
+    <ThemedView style={[styles.container, {backgroundColor: palette.textLight}]}>
       {/* Header */}
       <View style={styles.header}>
-        <ThemedText type="subtitle" style={{ color: palette.textLight }}>
+        <ThemedText type="title" style={{ color: palette.bg }}>
+          SightLine
         </ThemedText>
       </View>
 
@@ -84,6 +86,18 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
           {scanning ? "Stop Scanning" : "Start Scanning"}
         </ThemedText>
       </Pressable>
+
+      {/* Scanner Status */}
+      <ThemedView style={styles.card}>
+        <ThemedText type="defaultSemiBold" style={{ color: palette.textLight }}>
+          Scanner Status
+        </ThemedText>
+
+        <ThemedText style={{ color: palette.textLight }}>
+          {last ? `${last.label} — ${last.distance}` : "No detections yet."}
+        </ThemedText>
+
+      </ThemedView>
 
       {/* Card: Status */}
       <ThemedView style={styles.card}>
@@ -106,31 +120,16 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
       {/* Navigate Button */}
       <Pressable
-  style={[styles.button, styles.secondary]}
-  onPress={() => router.push("/(tabs)/navigate")}
-  accessibilityRole="button"
-  accessibilityLabel="Open navigation tools"
->
-  <ThemedText style={styles.buttonText}>Navigate</ThemedText>
-</Pressable>
+        style={[styles.button, styles.secondary]}
+        onPress={() => router.push("../Navigate")}
+        accessibilityRole="button"
+        accessibilityLabel="Open navigation tools"
+      >
+        <ThemedText style={styles.buttonText}>Navigate</ThemedText>
+      </Pressable>
 
 
-      {/* Latest Detection */}
-      <ThemedView style={styles.card}>
-        <ThemedText type="defaultSemiBold" style={{ color: palette.textLight }}>
-          Latest Detection
-        </ThemedText>
-
-        <ThemedText style={{ color: palette.textLight }}>
-          {last ? `${last.label} — ${last.distance}` : "No detections yet."}
-        </ThemedText>
-
-        {last?.meaning && (
-          <ThemedText style={[styles.sub, { color: palette.textSub }]}>
-            {last.meaning}
-          </ThemedText>
-        )}
-      </ThemedView>
+      
     </ThemedView>
   );
 }
@@ -143,6 +142,7 @@ const styles = StyleSheet.create({
   },
   header: {
     gap: 4,
+    paddingTop: 40
   },
   card: {
     padding: 16,

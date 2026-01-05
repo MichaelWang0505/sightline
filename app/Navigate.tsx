@@ -89,7 +89,6 @@ export default function NavigateScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title">Navigate</ThemedText>
 
       <Pressable
         style={[styles.mic, listening && styles.active]}
