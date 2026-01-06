@@ -1,12 +1,11 @@
 import { SignType } from "./types";
 
 export const SIGN_LABELS: Record<SignType, { label: string; meaning: string }> = {
-  STOP: { label: "STOP sign", meaning: "Intersection ahead. Come to a full stop." },
   PEDESTRIAN_CROSSING: { label: "Pedestrian crossing sign", meaning: "Crosswalk ahead." },
-  YIELD: { label: "YIELD sign", meaning: "Slow down and yield to traffic." },
-  DO_NOT_ENTER: { label: "DO NOT ENTER sign", meaning: "Wrong way. Do not proceed." },
   EXIT: { label: "EXIT sign", meaning: "Exit or doorway ahead." },
-  ROOM_NUMBER: { label: "Room sign", meaning: "Room identification ahead." },
-  DIRECTION_ARROW: { label: "Directional arrow sign", meaning: "Direction guidance ahead." },
-  ACCESSIBILITY: { label: "Accessibility sign", meaning: "Accessible route or facility nearby." },
+  EXIT_RIGHT: { label: "Exit Sign Right", meaning: "Exit on the right."},
+  EXIT_LEFT: { label: "Exit Sign Left", meaning: "Exit on the left."},  EXIT_BOTH: { label: "Exit Sign Both", meaning: "Exit both ways."},
+  WALK: { label: "Walk sign", meaning: "Safe to walk." },
+  STOP: { label: "Stop sign", meaning: "Stop before proceeding." },
+  TRAFFIC_LIGHT: { label: "Traffic light", meaning: "Traffic signal ahead." }
 };
