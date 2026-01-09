@@ -2,14 +2,14 @@ import { SIGN_LABELS } from "./signLabels";
 import { Detection, SignType } from "./types";
 
 const SIGNS: SignType[] = [
-  "STOP",
-  "EXIT",
-  "YIELD",
   "PEDESTRIAN_CROSSING",
-  "DO_NOT_ENTER",
-  "ACCESSIBILITY",
-  "DIRECTION_ARROW",
-  "ROOM_NUMBER",
+  "EXIT",
+  "EXIT_RIGHT",
+  "EXIT_LEFT",
+  "EXIT_BOTH",
+  "WALK",
+  "STOP",
+  "TRAFFIC_LIGHT"
 ];
 
 const DISTANCES = [

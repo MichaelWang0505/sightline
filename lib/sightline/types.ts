@@ -1,14 +1,14 @@
 export type Verbosity = "low" | "medium" | "high";
 
 export type SignType =
-  | "STOP"
   | "PEDESTRIAN_CROSSING"
-  | "YIELD"
-  | "DO_NOT_ENTER"
   | "EXIT"
-  | "ROOM_NUMBER"
-  | "DIRECTION_ARROW"
-  | "ACCESSIBILITY";
+  | "EXIT_RIGHT"
+  | "EXIT_LEFT"
+  | "EXIT_BOTH"
+  | "WALK"
+  | "STOP"
+  | "TRAFFIC_LIGHT"
 
 export type DistancePhrase =
   | "very close"

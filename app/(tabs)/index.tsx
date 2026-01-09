@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -11,6 +11,7 @@ import { ThemedView } from "@/components/themed-view";
 import { mockDetect } from "@/lib/sightline/mockDetector";
 import { speakDetection } from "@/lib/sightline/speak";
 import type { Detection, Verbosity } from "@/lib/sightline/types";
+import { CameraView, useCameraPermissions } from "expo-camera";
 
 import { useRouter } from "expo-router";
 
@@ -34,10 +35,22 @@ export default function ScanScreen() {
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  function start() {
+  const cameraRef = useRef<CameraView>(null);
+  const [permission, requestPermission] = useCameraPermissions();
+
+  useEffect(() => {
+  if (permission && !permission.granted) {
+    requestPermission();
+  }
+}, [permission]);
+
+  async function start() {
     setScanning(true);
 
-    timerRef.current = setInterval(() => {
+    timerRef.current = setInterval(async () => {
+      if (cameraRef.current) {
+        const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.7 });
+      }
       const d = mockDetect();
 
       if (d.confidence < 0.65) return;
@@ -63,6 +76,22 @@ export default function ScanScreen() {
   const statusSub = scanning
     ? "Keep your phone pointed forward. SightLine will announce signs ahead."
     : "Tap Start to begin listening for nearby signs.";
+
+  if (!permission) {
+    return <ThemedView style = {styles.container}><ThemedText>Loading...</ThemedText></ThemedView>;
+  }
+
+  if (!permission.granted) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor: palette.textLight }]}>
+        <View style={styles.header}>
+          <ThemedText type="title" style={{ color: palette.bg }}>
+            Please Grant Camera Permission
+          </ThemedText>
+        </View>
+      </ThemedView>
+    )
+  }
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: palette.textLight }]}>
@@ -123,6 +152,10 @@ export default function ScanScreen() {
       >
         <ThemedText style={styles.buttonText}>Navigate</ThemedText>
       </Pressable>
+
+      <View style={{ height: 0, width: 0, overflow: "hidden" }}>
+        <CameraView ref={cameraRef} style={{ flex: 1}} facing="back" />
+      </View>
     </ThemedView>
   );
 }
