@@ -1,9 +1,5 @@
 import { useRef, useState } from "react";
-import {
-  Pressable,
-  StyleSheet,
-  View
-} from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -31,42 +27,36 @@ export default function ScanScreen() {
   const [scanning, setScanning] = useState(false);
   const [verbosity] = useState<Verbosity>("medium");
   const [last, setLast] = useState<Detection | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-
-  function start() {
+  const start = () => {
     setScanning(true);
-
     timerRef.current = setInterval(() => {
       const d = mockDetect();
-
-      if (d.confidence < 0.65) return;
-
-      setLast(d);
-      speakDetection(d, verbosity);
+      if (d.confidence >= 0.65) {
+        setLast(d);
+        speakDetection(d, verbosity);
+      }
     }, 3000);
-  }
+  };
 
-  function stop() {
+  const stop = () => {
     setScanning(false);
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
-  }
+  };
 
-  function repeatLast() {
-    if (!last) return;
-    speakDetection(last, verbosity);
-  }
+  const repeatLast = () => {
+    if (last) speakDetection(last, verbosity);
+  };
 
   const statusText = scanning ? "Scanning for signs…" : "Scanner paused";
-  const statusSub =
-    scanning
-      ? "Keep your phone pointed forward. SightLine will announce signs ahead."
-      : "Tap Start to begin listening for nearby signs.";
+  const statusSub = scanning
+    ? "Keep your phone pointed forward. SightLine will announce signs ahead."
+    : "Tap Start to begin listening for nearby signs.";
 
   return (
-    <ThemedView style={[styles.container]}>
+    <ThemedView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <ThemedText type="title" style={{ color: palette.textLight }}>
@@ -77,7 +67,7 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
         </ThemedText>
       </View>
 
-      {/* Card: Status */}
+      {/* Status Card */}
       <ThemedView style={styles.card}>
         <ThemedText type="defaultSemiBold" style={{ color: palette.textLight }}>
           {statusText}
@@ -103,32 +93,27 @@ const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
         accessibilityRole="button"
         accessibilityLabel="Repeat last announcement"
       >
-        <ThemedText style={styles.buttonText}>
-          Repeat Last Announcement
-        </ThemedText>
+        <ThemedText style={styles.buttonText}>Repeat Last Announcement</ThemedText>
       </Pressable>
 
       {/* Navigate Button */}
       <Pressable
-  style={[styles.button, styles.secondary]}
-  onPress={() => router.push("/(tabs)/navigate")}
-  accessibilityRole="button"
-  accessibilityLabel="Open navigation tools"
->
-  <ThemedText style={styles.buttonText}>Navigate</ThemedText>
-</Pressable>
-
+        style={[styles.button, styles.secondary]}
+        onPress={() => router.push("/(tabs)/navigate")}
+        accessibilityRole="button"
+        accessibilityLabel="Open navigation tools"
+      >
+        <ThemedText style={styles.buttonText}>Navigate</ThemedText>
+      </Pressable>
 
       {/* Latest Detection */}
       <ThemedView style={styles.card}>
         <ThemedText type="defaultSemiBold" style={{ color: palette.textLight }}>
           Latest Detection
         </ThemedText>
-
         <ThemedText style={{ color: palette.textLight }}>
           {last ? `${last.label} — ${last.distance}` : "No detections yet."}
         </ThemedText>
-
         {last?.meaning && (
           <ThemedText style={[styles.sub, { color: palette.textSub }]}>
             {last.meaning}

@@ -1,16 +1,11 @@
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
 import * as Speech from "expo-speech";
 import { useState } from "react";
-import {
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    StyleSheet,
-    TextInput,
-    View,
-} from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+
+// Color palette for the app
 const palette = {
   bg: "#0F1220",
   card: "#191C2B",
@@ -24,25 +19,24 @@ const palette = {
 export default function NavigateScreen() {
   const [destination, setDestination] = useState("");
 
-  function speak(text: string) {
+  // Function to speak text using the device's TTS
+  const speak = (text: string) => {
     Speech.speak(text, {
       language: "en-US",
       pitch: 1,
       rate: 1,
     });
-  }
+  };
 
-  function handleStart() {
+  // Handle the start of navigation
+  const handleStart = () => {
     const trimmed = destination.trim();
-
     if (!trimmed) {
       speak("Please enter where you want to go.");
       return;
     }
-
-    // For now this is just a confirmation + placeholder.
     speak(`Starting guidance to ${trimmed}. Navigation will update as you move.`);
-  }
+  };
 
   return (
     <ThemedView style={styles.screen}>
@@ -50,23 +44,19 @@ export default function NavigateScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Header */}
+        {/* Header Section */}
         <View style={styles.header}>
           <ThemedText type="title" style={styles.headerTitle}>
             Navigation
           </ThemedText>
           <ThemedText style={styles.headerSub}>
-            Tell SightLine where you want to go. We’ll use this in combination
-            with detected signs and landmarks.
+            Tell SightLine where you want to go. We’ll use this in combination with detected signs and landmarks.
           </ThemedText>
         </View>
 
-        {/* Input card */}
+        {/* Input Card */}
         <ThemedView style={styles.card}>
-          <ThemedText style={styles.label}>
-            Destination
-          </ThemedText>
-
+          <ThemedText style={styles.label}>Destination</ThemedText>
           <TextInput
             value={destination}
             onChangeText={setDestination}
@@ -78,15 +68,12 @@ export default function NavigateScreen() {
             accessibilityLabel="Destination"
             accessibilityHint="Type where you want to go, then press the Start navigation button."
           />
-
           <ThemedText style={styles.helper}>
-            Use short, simple phrases like “front desk”, “bus stop”, or
-            “elevator lobby”. A screen reader will announce the field and the
-            button below.
+            Use short, simple phrases like “front desk”, “bus stop”, or “elevator lobby”. A screen reader will announce the field and the button below.
           </ThemedText>
         </ThemedView>
 
-        {/* Start navigation button */}
+        {/* Start Navigation Button */}
         <Pressable
           style={styles.button}
           onPress={handleStart}
@@ -94,15 +81,12 @@ export default function NavigateScreen() {
           accessibilityLabel="Start navigation"
           accessibilityHint="SightLine will confirm your destination and begin guidance."
         >
-          <ThemedText style={styles.buttonText}>
-            Start Navigation
-          </ThemedText>
+          <ThemedText style={styles.buttonText}>Start Navigation</ThemedText>
         </Pressable>
 
-        {/* Safety note */}
+        {/* Safety Note */}
         <ThemedText style={styles.safety}>
-          Navigation is an assistive aid and may be imperfect. Always confirm
-          your surroundings with your cane, guide dog, or orientation skills.
+          Navigation is an assistive aid and may be imperfect. Always confirm your surroundings with your cane, guide dog, or orientation skills.
         </ThemedText>
       </KeyboardAvoidingView>
     </ThemedView>
