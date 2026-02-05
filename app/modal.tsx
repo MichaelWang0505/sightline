@@ -8,6 +8,8 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 
 export default function NavigateScreen() {
+  console.log("sendAudioToBackend CALLED");
+
   const [listening, setListening] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
@@ -116,9 +118,6 @@ async function sendAudioToBackend(uri: string) {
   console.log("Sending audio to backend:", uri);
   const response = await fetch("http://10.0.0.174:3000/api/voice-query", {
     method: "POST",
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
     body: formData,
   });
 
@@ -169,13 +168,21 @@ async function sendAudioToBackend(uri: string) {
   }
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={styles.container} pointerEvents="auto">
+
 
       <Pressable
         style={[styles.mic, listening && styles.active]}
-        onPressIn={startListening}
-        onPressOut={stopListening}
+        onPressIn={() => {
+          console.log("PRESS IN");
+          startListening();
+        }}
+        onPressOut={() => {
+        console.log("PRESS OUT");
+        stopListening();
+        }}
       >
+
         <ThemedText>
           {listening ? "Listening..." : "Hold to Speak"}
         </ThemedText>

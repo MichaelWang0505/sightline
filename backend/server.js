@@ -52,4 +52,5 @@ app.post("/api/voice-query", upload.single("audio"), async (req, res) => {
 app.listen(3000, "0.0.0.0", () => {
   console.log("Backend running on http://0.0.0.0:3000");
 });
+setInterval(() => {}, 1000);
 
