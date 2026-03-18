@@ -118,7 +118,7 @@ async function sendAudioToBackend(uri: string) {
     type: "audio/m4a",
   } as any);
   console.log("Sending audio to backend:", uri);
-  const response = await fetch("http://10.0.0.174:3000/api/voice-query", {
+  const response = await fetch("https://python-backend-i8iy.onrender.com/voice_input", {
     method: "POST",
     body: formData,
   });
@@ -174,7 +174,7 @@ async function sendAudioToBackend(uri: string) {
     const endLon = parseFloat(item.lon);
 
     try {
-      const res = await fetch("https://python-backend-i8iy.onrender.com/", {
+      const res = await fetch("https://python-backend-i8iy.onrender.com/api/route", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
