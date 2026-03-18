@@ -1,3 +1,5 @@
+import * as Location from "expo-location";
+import * as Speech from "expo-speech";
 import { useEffect, useRef, useState } from "react";
 import {
   Pressable,
@@ -8,6 +10,7 @@ import {
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 
+import { useRouteSession } from "@/lib/route-session";
 import { mockDetect } from "@/lib/sightline/mockDetector";
 import { speakDetection } from "@/lib/sightline/speak";
 import type { Detection, Verbosity } from "@/lib/sightline/types";
@@ -28,12 +31,16 @@ const palette = {
 
 export default function ScanScreen() {
   const router = useRouter();
+  const { activeRoute, endRoute } = useRouteSession();
 
   const [scanning, setScanning] = useState(false);
   const [verbosity] = useState<Verbosity>("medium");
   const [last, setLast] = useState<Detection | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const routeWatcherRef = useRef<Location.LocationSubscription | null>(null);
+  const nextStepIndexRef = useRef(0);
+  const lastInstructionAtRef = useRef(0);
 
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -43,6 +50,70 @@ export default function ScanScreen() {
     requestPermission();
   }
 }, [permission]);
+
+  useEffect(() => {
+    if (!activeRoute) {
+      routeWatcherRef.current?.remove();
+      routeWatcherRef.current = null;
+      nextStepIndexRef.current = 0;
+      lastInstructionAtRef.current = 0;
+      Speech.stop();
+      return;
+    }
+
+    const steps = activeRoute.steps;
+    nextStepIndexRef.current = 0;
+    lastInstructionAtRef.current = 0;
+
+    const speakNextStep = async () => {
+      if (!activeRoute) return;
+
+      const speaking = await Speech.isSpeakingAsync();
+      if (speaking) return;
+
+      const now = Date.now();
+      if (now - lastInstructionAtRef.current < 12000) return;
+
+      const stepIndex = nextStepIndexRef.current;
+      if (stepIndex >= steps.length) {
+        Speech.speak(`You have arrived at ${activeRoute.destinationName}.`);
+        endRoute();
+        return;
+      }
+
+      Speech.speak(steps[stepIndex].instruction);
+      nextStepIndexRef.current = stepIndex + 1;
+      lastInstructionAtRef.current = now;
+    };
+
+    if (steps.length === 0) {
+      Speech.speak(`Navigation started to ${activeRoute.destinationName}.`);
+    } else {
+      Speech.speak(`Navigation started to ${activeRoute.destinationName}. ${steps[0].instruction}`);
+      nextStepIndexRef.current = 1;
+      lastInstructionAtRef.current = Date.now();
+    }
+
+    (async () => {
+      const sub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          distanceInterval: 8,
+          timeInterval: 5000,
+        },
+        () => {
+          speakNextStep();
+        }
+      );
+
+      routeWatcherRef.current = sub;
+    })();
+
+    return () => {
+      routeWatcherRef.current?.remove();
+      routeWatcherRef.current = null;
+    };
+  }, [activeRoute, endRoute]);
 
   async function start() {
     setScanning(true);
@@ -147,10 +218,12 @@ export default function ScanScreen() {
       <Pressable
         style={[styles.button, styles.secondary]}
         accessibilityRole="button"
-        accessibilityLabel="Navigate"
-        onPress={() => router.push("/modal")}
+        accessibilityLabel={activeRoute ? "End route" : "Navigate"}
+        onPress={activeRoute ? endRoute : () => router.push("/modal")}
       >
-        <ThemedText style={styles.buttonText}>Navigate</ThemedText>
+        <ThemedText style={styles.buttonText}>
+          {activeRoute ? "End Route" : "Navigate"}
+        </ThemedText>
       </Pressable>
 
       <View style={{ height: 0, width: 0, overflow: "hidden" }}>

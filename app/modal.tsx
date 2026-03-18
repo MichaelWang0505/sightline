@@ -1,26 +1,29 @@
 import { Audio } from "expo-av";
 import * as Location from "expo-location";
+import { useRouter } from "expo-router";
 import * as Speech from "expo-speech";
 import { useEffect, useState } from "react";
 import { FlatList, Pressable, StyleSheet } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { type RouteStep, useRouteSession } from "@/lib/route-session";
 
 export default function NavigateScreen() {
+  const router = useRouter();
+  const { startRoute } = useRouteSession();
 
-  const [routeSteps, setRouteSteps] = useState<any[]>([]);
-  const [currentStep, setCurrentStep] = useState(0);
   const [listening, setListening] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [watcher, setWatcher] = useState<Location.LocationSubscription | null>(null);
 
 
   // Ask for mic + location permission
   useEffect(() => {
+    Speech.speak("Hold the button and say where you want to go.");
+
     (async () => {
       await Audio.requestPermissionsAsync();
 
@@ -202,52 +205,20 @@ async function sendAudioToBackend(uri: string) {
         return;
       }
 
-      const steps = data.routes[0].segments[0].steps;
-
-      setRouteSteps(steps);
-      setCurrentStep(0);
+      const steps: RouteStep[] = (data.routes?.[0]?.segments?.[0]?.steps ?? [])
+        .map((step: any) => ({
+          instruction: String(step?.instruction ?? ""),
+          distance: typeof step?.distance === "number" ? step.distance : undefined,
+        }))
+        .filter((step: RouteStep) => step.instruction.length > 0);
 
       Speech.speak("Starting navigation");
 
-      if (steps.length > 0) {
-        Speech.speak(steps[0].instruction);
-      }
-
-      startNavigation();
-      //router.back();
+      startRoute(item.display_name, steps);
+      router.back();
 
     } catch (err) {
       console.error("Routing error:", err);
-    }
-  }
-
-  async function startNavigation() {
-    const sub = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.High,
-        distanceInterval: 5,
-      },
-      (location) => {
-        checkNextStep(location);
-      }
-    );
-
-    setWatcher(sub);
-  }
-
-  async function checkNextStep(location: any) {
-    if (routeSteps.length === 0) return;
-
-    const step = routeSteps[currentStep];
-    if (!step) return;
-
-    const instruction = step.instruction;
-
-    const speaking = await Speech.isSpeakingAsync();
-
-    if (!speaking) {
-      Speech.speak(instruction);
-      setCurrentStep((prev) => prev + 1);
     }
   }
 
