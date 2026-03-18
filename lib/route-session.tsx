@@ -3,6 +3,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from "re
 export type RouteStep = {
   instruction: string;
   distance?: number;
+  waypoint?: { lat: number; lon: number };
 };
 
 type RouteSession = {

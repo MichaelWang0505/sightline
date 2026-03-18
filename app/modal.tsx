@@ -183,10 +183,11 @@ async function sendAudioToBackend(uri: string) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-            startLon, 
+            startLon,
             startLat,
-            endLon, 
-            endLat
+            endLon,
+            endLat,
+            geometry_format: "geojson",
         }),
       });
 
@@ -205,11 +206,21 @@ async function sendAudioToBackend(uri: string) {
         return;
       }
 
+      const geometry = data.routes?.[0]?.geometry;
+      const coords: [number, number][] = Array.isArray(geometry?.coordinates)
+        ? geometry.coordinates
+        : [];
+
       const steps: RouteStep[] = (data.routes?.[0]?.segments?.[0]?.steps ?? [])
-        .map((step: any) => ({
-          instruction: String(step?.instruction ?? ""),
-          distance: typeof step?.distance === "number" ? step.distance : undefined,
-        }))
+        .map((step: any) => {
+          const wpIndex: number = step?.way_points?.[0] ?? -1;
+          const coord = wpIndex >= 0 ? coords[wpIndex] : undefined;
+          return {
+            instruction: String(step?.instruction ?? ""),
+            distance: typeof step?.distance === "number" ? step.distance : undefined,
+            waypoint: coord ? { lat: coord[1], lon: coord[0] } : undefined,
+          };
+        })
         .filter((step: RouteStep) => step.instruction.length > 0);
 
       Speech.speak("Starting navigation");

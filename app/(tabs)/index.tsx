@@ -51,6 +51,18 @@ export default function ScanScreen() {
   }
 }, [permission]);
 
+  function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371000;
+    const toRad = (x: number) => (x * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
   useEffect(() => {
     if (!activeRoute) {
       routeWatcherRef.current?.remove();
@@ -65,14 +77,15 @@ export default function ScanScreen() {
     nextStepIndexRef.current = 0;
     lastInstructionAtRef.current = 0;
 
-    const speakNextStep = async () => {
+    const speakNextStep = async (location: Location.LocationObject) => {
       if (!activeRoute) return;
 
       const speaking = await Speech.isSpeakingAsync();
       if (speaking) return;
 
+      // 3s debounce prevents re-firing the same step repeatedly
       const now = Date.now();
-      if (now - lastInstructionAtRef.current < 12000) return;
+      if (now - lastInstructionAtRef.current < 3000) return;
 
       const stepIndex = nextStepIndexRef.current;
       if (stepIndex >= steps.length) {
@@ -81,7 +94,20 @@ export default function ScanScreen() {
         return;
       }
 
-      Speech.speak(steps[stepIndex].instruction);
+      const step = steps[stepIndex];
+
+      // Only speak when within 25 metres of the step's waypoint
+      if (step.waypoint) {
+        const dist = haversineMeters(
+          location.coords.latitude,
+          location.coords.longitude,
+          step.waypoint.lat,
+          step.waypoint.lon
+        );
+        if (dist > 25) return;
+      }
+
+      Speech.speak(step.instruction);
       nextStepIndexRef.current = stepIndex + 1;
       lastInstructionAtRef.current = now;
     };
@@ -97,12 +123,12 @@ export default function ScanScreen() {
     (async () => {
       const sub = await Location.watchPositionAsync(
         {
-          accuracy: Location.Accuracy.Balanced,
-          distanceInterval: 8,
-          timeInterval: 5000,
+          accuracy: Location.Accuracy.High,
+          distanceInterval: 4,
+          timeInterval: 2000,
         },
-        () => {
-          speakNextStep();
+        (location) => {
+          speakNextStep(location);
         }
       );
 
