@@ -7,8 +7,6 @@ import { FlatList, Pressable, StyleSheet } from "react-native";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 
-const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImYzZTRlOGE3YmM0YTQ1MTZhYmY5YWQzZDU0YTAyZWE1IiwiaCI6Im11cm11cjY0In0=";
-
 export default function NavigateScreen() {
 
   const [routeSteps, setRouteSteps] = useState<any[]>([]);
@@ -93,7 +91,7 @@ export default function NavigateScreen() {
 
 
 
-  async function stopListening() {
+async function stopListening() {
   setListening(false);
 
   if (!recording) return;
@@ -176,23 +174,24 @@ async function sendAudioToBackend(uri: string) {
     const endLon = parseFloat(item.lon);
 
     try {
-      const res = await fetch(
-        "https://api.openrouteservice.org/v2/directions/foot-walking",
-        {
-          method: "POST",
-          headers: {
-            "Authorization": ORS_API_KEY,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            coordinates: [
-              [startLon, startLat],
-              [endLon, endLat]
-            ],
-            instructions: true
-          })
-        }
-      );
+      const res = await fetch("https://python-backend-i8iy.onrender.com/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            startLon, 
+            startLat,
+            endLon, 
+            endLat
+        }),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("Route Backend Error: ", errorText);
+        return;
+      }
 
       const data = await res.json();
       console.log("ORS response:", data);
