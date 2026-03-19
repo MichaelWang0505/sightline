@@ -152,11 +152,6 @@ export default function ScanScreen() {
     speakDetection(last, verbosity);
   }
 
-  const statusText = scanning ? "Scanning for signs…" : "Scanner paused";
-  const statusSub = scanning
-    ? "Keep your phone pointed forward. SightLine will announce signs ahead."
-    : "Tap Start to begin listening for nearby signs.";
-
   if (!permission) {
     return <ThemedView style={styles.container}><ThemedText>Loading...</ThemedText></ThemedView>;
   }
@@ -210,15 +205,7 @@ export default function ScanScreen() {
         </ThemedText>
       </ThemedView>
 
-      {/* Status Card */}
-      <ThemedView style={styles.card}>
-        <ThemedText type="defaultSemiBold" style={{ color: palette.textLight }}>
-          {statusText}
-        </ThemedText>
-        <ThemedText style={{ color: palette.textSub }}>{statusSub}</ThemedText>
-      </ThemedView>
-
-      {/* Two side-by-side action cards */}
+      {/* Two side-by-side action cards — flex:1 fills all remaining space */}
       <View style={styles.row}>
         <Pressable
           style={styles.actionCard}
@@ -270,26 +257,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   card: {
-    padding: 16,
+    padding: 24,
     borderRadius: 18,
     backgroundColor: palette.card,
     gap: 8,
   },
   button: {
-    paddingVertical: 18,
+    paddingVertical: 26,
     borderRadius: 16,
     alignItems: "center",
     backgroundColor: palette.primary,
-  },
-  secondary: {
-    backgroundColor: palette.secondary,
   },
   danger: {
     backgroundColor: palette.danger,
   },
   buttonText: {
     color: "white",
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700",
   },
   row: {
@@ -307,7 +291,7 @@ const styles = StyleSheet.create({
   },
   actionCardText: {
     color: "white",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
     textAlign: "center",
   },
