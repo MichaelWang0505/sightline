@@ -178,9 +178,11 @@ export default function ScanScreen() {
           style={styles.logo}
           resizeMode="contain"
         />
-        <ThemedText type="title" style={{ color: palette.textDark }}>
-          SightLine
-        </ThemedText>
+        <Image
+          source={require("@/assets/images/sightline-title.png")}
+          style={styles.titleImage}
+          resizeMode="contain"
+        />
       </View>
 
       {/* Start/Stop Button */}
@@ -249,11 +251,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 40,
     paddingBottom: 10,
-    gap: 10,
+    gap: -100,
   },
   logo: {
-    width: 44,
-    height: 44,
+    width: 80,
+    height: 80,
+    marginTop: -15,
     borderRadius: 8,
   },
   card: {
@@ -263,7 +266,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   button: {
-    paddingVertical: 26,
+    paddingVertical: 70,
     borderRadius: 16,
     alignItems: "center",
     backgroundColor: palette.primary,
@@ -294,5 +297,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     textAlign: "center",
+  },
+  titleImage: {
+    height: 80,
+    width: 100,
+    marginLeft: -90,
+    flex: 1,
   },
 });
