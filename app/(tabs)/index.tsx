@@ -2,64 +2,43 @@ import * as Location from "expo-location";
 import * as Speech from "expo-speech";
 import { useEffect, useRef, useState } from "react";
 import {
+  Image,
   Pressable,
   StyleSheet,
-  View
+  View,
 } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 
 import { useRouteSession } from "@/lib/route-session";
+import { mockDetect } from "@/lib/sightline/mockDetector";
+import { speakDetection } from "@/lib/sightline/speak";
+import type { Detection, Verbosity } from "@/lib/sightline/types";
 import { CameraView, useCameraPermissions } from "expo-camera";
-
 import { useRouter } from "expo-router";
 
 const palette = {
   bg: "#0F1220",
-  card: "#191C2B",
+  card: "#0d2340",
   primary: "#3A7CFF",
   danger: "#D64545",
   secondary: "#2D2F3E",
   textLight: "#FFFFFF",
   textSub: "#C7CBDA",
+  textDark: "#0d2340",
   accent: "#4ADE80",
 };
-
-function formatSignsForSpeech(data: Record<string, any>) {
-  const detected = Object.entries(data)
-    .filter(([, value]) => typeof value === "object" && value?.detected === true)
-    .map(([key]) => key.replace(/_/g, " "));
-
-  if (detected.length === 0) {
-    return "No signs detected.";
-  }
-
-  return `Detected ${detected.join(", ")}.`;
-}
-
-async function fetchSignsMessage() {
-  const res = await fetch("https://python-backend-i8iy.onrender.com/signs", {
-    method: "GET",
-  });
-
-  if (!res.ok) {
-    throw new Error(`Signs request failed: ${res.status}`);
-  }
-
-  const data = await res.json();
-  return formatSignsForSpeech(data);
-}
 
 export default function ScanScreen() {
   const router = useRouter();
   const { activeRoute, endRoute } = useRouteSession();
 
   const [scanning, setScanning] = useState(false);
-  const [lastMessage, setLastMessage] = useState<string>("No detections yet.");
+  const [verbosity] = useState<Verbosity>("medium");
+  const [last, setLast] = useState<Detection | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const activeRouteRef = useRef(activeRoute);
   const routeWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const nextStepIndexRef = useRef(0);
   const lastInstructionAtRef = useRef(0);
@@ -68,122 +47,96 @@ export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
 
   useEffect(() => {
-    activeRouteRef.current = activeRoute;
-  }, [activeRoute]);
+    if (permission && !permission.granted) {
+      requestPermission();
+    }
+  }, [permission]);
+
+  function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371000;
+    const toRad = (x: number) => (x * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
 
   useEffect(() => {
-  if (permission && !permission.granted) {
-    requestPermission();
-  }
-}, [permission]);
-
-function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000;
-  const toRad = (x: number) => (x * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-useEffect(() => {
-  if (!activeRoute) {
-    routeWatcherRef.current?.remove();
-    routeWatcherRef.current = null;
-    nextStepIndexRef.current = 0;
-    lastInstructionAtRef.current = 0;
-    Speech.stop();
-    return;
-  }
-
-  const steps = activeRoute.steps;
-  nextStepIndexRef.current = 0;
-  lastInstructionAtRef.current = 0;
-
-  const speakNextStep = async (location: Location.LocationObject) => {
-    if (!activeRoute) return;
-
-    const speaking = await Speech.isSpeakingAsync();
-    if (speaking) return;
-
-    // 3s debounce prevents re-firing the same step repeatedly
-    const now = Date.now();
-    if (now - lastInstructionAtRef.current < 3000) return;
-
-    const stepIndex = nextStepIndexRef.current;
-    if (stepIndex >= steps.length) {
-      Speech.speak(`You have arrived at ${activeRoute.destinationName}.`);
-      endRoute();
+    if (!activeRoute) {
+      routeWatcherRef.current?.remove();
+      routeWatcherRef.current = null;
+      nextStepIndexRef.current = 0;
+      lastInstructionAtRef.current = 0;
+      Speech.stop();
       return;
     }
 
-    const step = steps[stepIndex];
+    const steps = activeRoute.steps;
+    nextStepIndexRef.current = 0;
+    lastInstructionAtRef.current = 0;
 
-    // Only speak when within 25 metres of the step's waypoint
-    if (step.waypoint) {
-      const dist = haversineMeters(
-        location.coords.latitude,
-        location.coords.longitude,
-        step.waypoint.lat,
-        step.waypoint.lon
-      );
-      if (dist > 25) return;
+    const speakNextStep = async (location: Location.LocationObject) => {
+      if (!activeRoute) return;
+      const speaking = await Speech.isSpeakingAsync();
+      if (speaking) return;
+      const now = Date.now();
+      if (now - lastInstructionAtRef.current < 3000) return;
+      const stepIndex = nextStepIndexRef.current;
+      if (stepIndex >= steps.length) {
+        Speech.speak(`You have arrived at ${activeRoute.destinationName}.`);
+        endRoute();
+        return;
+      }
+      const step = steps[stepIndex];
+      if (step.waypoint) {
+        const dist = haversineMeters(
+          location.coords.latitude,
+          location.coords.longitude,
+          step.waypoint.lat,
+          step.waypoint.lon
+        );
+        if (dist > 25) return;
+      }
+      Speech.speak(step.instruction);
+      nextStepIndexRef.current = stepIndex + 1;
+      lastInstructionAtRef.current = now;
+    };
+
+    if (steps.length === 0) {
+      Speech.speak(`Navigation started to ${activeRoute.destinationName}.`);
+    } else {
+      Speech.speak(`Navigation started to ${activeRoute.destinationName}. ${steps[0].instruction}`);
+      nextStepIndexRef.current = 1;
+      lastInstructionAtRef.current = Date.now();
     }
 
-    Speech.speak(step.instruction);
-    nextStepIndexRef.current = stepIndex + 1;
-    lastInstructionAtRef.current = now;
-  };
+    (async () => {
+      const sub = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.High, distanceInterval: 4, timeInterval: 2000 },
+        (location) => { speakNextStep(location); }
+      );
+      routeWatcherRef.current = sub;
+    })();
 
-  if (steps.length === 0) {
-    Speech.speak(`Navigation started to ${activeRoute.destinationName}.`);
-  } else {
-    Speech.speak(`Navigation started to ${activeRoute.destinationName}. ${steps[0].instruction}`);
-    nextStepIndexRef.current = 1;
-    lastInstructionAtRef.current = Date.now();
-  }
-
-  (async () => {
-    const sub = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.High,
-        distanceInterval: 4,
-        timeInterval: 2000,
-      },
-      (location) => {
-        speakNextStep(location);
-      }
-    );
-
-    routeWatcherRef.current = sub;
-  })();
-
-  return () => {
-    routeWatcherRef.current?.remove();
-    routeWatcherRef.current = null;
-  };
-}, [activeRoute, endRoute]);
+    return () => {
+      routeWatcherRef.current?.remove();
+      routeWatcherRef.current = null;
+    };
+  }, [activeRoute, endRoute]);
 
   async function start() {
     setScanning(true);
-
     timerRef.current = setInterval(async () => {
-      // Do not run sign polling while turn-by-turn navigation is active.
-      if (activeRouteRef.current) {
-        return;
+      if (cameraRef.current) {
+        await cameraRef.current.takePictureAsync({ base64: true, quality: 0.7 });
       }
-
-      try {
-        const message = await fetchSignsMessage();
-        setLastMessage(message);
-        Speech.stop();
-        Speech.speak(message);
-      } catch (error) {
-        console.warn("Could not fetch signs:", error);
-      }
+      const d = mockDetect();
+      if (d.confidence < 0.65) return;
+      setLast(d);
+      speakDetection(d, verbosity);
     }, 3000);
   }
 
@@ -191,11 +144,12 @@ useEffect(() => {
     setScanning(false);
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
-    setLastMessage("No detections yet.");
+    setLast(null);
   }
 
   function repeatLast() {
-    Speech.speak(lastMessage);
+    if (!last) return;
+    speakDetection(last, verbosity);
   }
 
   const statusText = scanning ? "Scanning for signs…" : "Scanner paused";
@@ -204,26 +158,32 @@ useEffect(() => {
     : "Tap Start to begin listening for nearby signs.";
 
   if (!permission) {
-    return <ThemedView style = {styles.container}><ThemedText>Loading...</ThemedText></ThemedView>;
+    return <ThemedView style={styles.container}><ThemedText>Loading...</ThemedText></ThemedView>;
   }
 
   if (!permission.granted) {
     return (
-      <ThemedView style={[styles.container, { backgroundColor: palette.textLight }]}>
+      <ThemedView style={[styles.container, { backgroundColor: "#ffffff" }]}>
         <View style={styles.header}>
-          <ThemedText type="title" style={{ color: palette.bg }}>
+          <ThemedText type="title" style={{ color: palette.textDark }}>
             Please Grant Camera Permission
           </ThemedText>
         </View>
       </ThemedView>
-    )
+    );
   }
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: palette.textLight }]}>
-      {/* Header */}
+    <ThemedView style={[styles.container, { backgroundColor: "#ffffff" }]}>
+
+      {/* Header with logo */}
       <View style={styles.header}>
-        <ThemedText type="title" style={{ color: palette.bg }}>
+        <Image
+          source={require("@/assets/images/logo.png")}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        <ThemedText type="title" style={{ color: palette.textDark }}>
           SightLine
         </ThemedText>
       </View>
@@ -245,8 +205,9 @@ useEffect(() => {
         <ThemedText type="defaultSemiBold" style={{ color: palette.textLight }}>
           Scanner Status
         </ThemedText>
-
-        <ThemedText style={{ color: palette.textLight }}>{lastMessage}</ThemedText>
+        <ThemedText style={{ color: palette.textLight }}>
+          {last ? `${last.label} — ${last.distance}` : "No detections yet."}
+        </ThemedText>
       </ThemedView>
 
       {/* Status Card */}
@@ -257,31 +218,35 @@ useEffect(() => {
         <ThemedText style={{ color: palette.textSub }}>{statusSub}</ThemedText>
       </ThemedView>
 
-      {/* Repeat Button */}
-      <Pressable
-        style={[styles.button, styles.secondary]}
-        onPress={repeatLast}
-        accessibilityRole="button"
-        accessibilityLabel="Repeat last announcement"
-      >
-        <ThemedText style={styles.buttonText}>Repeat Last Announcement</ThemedText>
-      </Pressable>
+      {/* Two side-by-side action cards */}
+      <View style={styles.row}>
+        <Pressable
+          style={styles.actionCard}
+          onPress={repeatLast}
+          accessibilityRole="button"
+          accessibilityLabel="Repeat last announcement"
+        >
+          <ThemedText style={styles.actionCardText}>
+            Repeat Last Announcement
+          </ThemedText>
+        </Pressable>
 
-      {/* Navigate Button */}
-      <Pressable
-        style={[styles.button, activeRoute ? styles.danger : styles.secondary]}
-        accessibilityRole="button"
-        accessibilityLabel={activeRoute ? "End route" : "Navigate"}
-        onPress={activeRoute ? endRoute : () => router.push("/modal")}
-      >
-        <ThemedText style={styles.buttonText}>
-          {activeRoute ? "End Route" : "Navigate"}
-        </ThemedText>
-      </Pressable>
+        <Pressable
+          style={styles.actionCard}
+          onPress={activeRoute ? endRoute : () => router.push("/modal")}
+          accessibilityRole="button"
+          accessibilityLabel={activeRoute ? "End route" : "Start Navigation"}
+        >
+          <ThemedText style={styles.actionCardText}>
+            {activeRoute ? "End Route" : "Start Navigation"}
+          </ThemedText>
+        </Pressable>
+      </View>
 
       <View style={{ height: 0, width: 0, overflow: "hidden" }}>
-        <CameraView ref={cameraRef} style={{ flex: 1}} facing="back" />
+        <CameraView ref={cameraRef} style={{ flex: 1 }} facing="back" />
       </View>
+
     </ThemedView>
   );
 }
@@ -290,11 +255,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 22,
-    gap: 18,
+    gap: 16,
   },
   header: {
-    gap: 4,
+    flexDirection: "row",
+    alignItems: "center",
     paddingTop: 40,
+    paddingBottom: 10,
+    gap: 10,
+  },
+  logo: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
   },
   card: {
     padding: 16,
@@ -319,8 +292,23 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
-  sub: {
-    opacity: 0.85,
-    marginTop: 4,
+  row: {
+    flexDirection: "row",
+    gap: 14,
+    flex: 1,
+  },
+  actionCard: {
+    flex: 1,
+    backgroundColor: palette.secondary,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
+  actionCardText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
   },
 });
