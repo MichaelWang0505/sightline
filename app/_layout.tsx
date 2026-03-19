@@ -18,7 +18,7 @@ export default function RootLayout() {
       <RouteSessionProvider>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+          <Stack.Screen name="navigate" options={{ presentation: 'modal', title: 'Navigate' }} />
         </Stack>
         <StatusBar style="auto" />
       </RouteSessionProvider>

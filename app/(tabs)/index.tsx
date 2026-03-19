@@ -220,7 +220,7 @@ export default function ScanScreen() {
 
         <Pressable
           style={styles.actionCard}
-          onPress={activeRoute ? endRoute : () => router.push("/modal")}
+          onPress={activeRoute ? endRoute : () => router.push("/navigate")}
           accessibilityRole="button"
           accessibilityLabel={activeRoute ? "End route" : "Start Navigation"}
         >
