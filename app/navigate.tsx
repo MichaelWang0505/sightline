@@ -9,6 +9,9 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { type RouteStep, useRouteSession } from "@/lib/route-session";
 
+const VOICE_INPUT_URL = "https://python-backend-i8iy.onrender.com/voice_input";
+const ROUTE_URL = "https://python-backend-i8iy.onrender.com/api/route";
+
 export default function NavigateScreen() {
   const router = useRouter();
   const { startRoute } = useRouteSession();
@@ -19,8 +22,6 @@ export default function NavigateScreen() {
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
 
-
-  // Ask for mic + location permission
   useEffect(() => {
     Speech.speak("Hold the button and say where you want to go.");
 
@@ -39,152 +40,140 @@ export default function NavigateScreen() {
     })();
   }, []);
 
-  //listens to user audio input
   async function startListening() {
-  // Prevent double recordings
-  if (recording) {
-    try {
-      await recording.stopAndUnloadAsync();
-    } catch {}
-    setRecording(null);
-  }
+    if (recording) {
+      try {
+        await recording.stopAndUnloadAsync();
+      } catch {
+      }
+      setRecording(null);
+    }
 
-  setListening(true);
-  setResults([]);
+    setListening(true);
+    setResults([]);
 
-  const { status } = await Audio.requestPermissionsAsync();
-  if (status !== "granted") {
-    console.warn("Mic permission denied");
-    return;
-  }
+    const { status } = await Audio.requestPermissionsAsync();
+    if (status !== "granted") {
+      console.warn("Mic permission denied");
+      return;
+    }
 
-  //required for iOS
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: true,
-    playsInSilentModeIOS: true,
-  });
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+    });
 
-  const rec = new Audio.Recording();
-  await rec.prepareToRecordAsync({
-    android: {
-      extension: ".m4a",
-      outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-      audioEncoder: Audio.AndroidAudioEncoder.AAC,
-      sampleRate: 44100,
-      numberOfChannels: 2,
-      bitRate: 128000,
-    },
-    ios: {
-    extension: ".m4a",
-    audioQuality: Audio.IOSAudioQuality.HIGH,
-    sampleRate: 44100,
-    numberOfChannels: 1,
-    bitRate: 128000,
-    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-    },
-    web: {
-      mimeType: "audio/webm",
-      bitsPerSecond: 128000,
-    },
-  });
-
-  await rec.startAsync();
-  setRecording(rec);
-}
-
-
-
-async function stopListening() {
-  setListening(false);
-
-  if (!recording) return;
-
-  await recording.stopAndUnloadAsync();
-  const uri = recording.getURI();
-  console.log("Recording URI:", uri);
-
-  setRecording(null);
-
-  //send audio to backend
-  const text = await sendAudioToBackend(uri!);
-  setQuery(text);
-
-  //searches places with inputted text
-  await searchPlaces(text);
-}
-
-async function sendAudioToBackend(uri: string) {
-  const formData = new FormData();
-  formData.append("audio", {
-    uri,
-    name: "audio.m4a",
-    type: "audio/m4a",
-  } as any);
-  console.log("Sending audio to backend:", uri);
-  const response = await fetch("https://python-backend-i8iy.onrender.com/voice_input", {
-    method: "POST",
-    body: formData,
-  });
-
-  const data = await response.json();
-  console.log("Backend response:", data);
-  return data.text;
-}
-
-async function searchPlaces(text: string) {
-  if (!userLocation) return;
-
-  const { latitude, longitude } = userLocation.coords;
-
-  // ~10km box around user
-  const left = longitude - 0.1;
-  const right = longitude + 0.1;
-  const top = latitude + 0.1;
-  const bottom = latitude - 0.1;
-
-  const url =
-    `https://nominatim.openstreetmap.org/search` +
-    `?q=${encodeURIComponent(text)}` +
-    `&format=json&addressdetails=1&limit=5` +
-    `&viewbox=${left},${top},${right},${bottom}` +
-    `&bounded=1`;
-
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Expo-App",
+    const newRecording = new Audio.Recording();
+    await newRecording.prepareToRecordAsync({
+      android: {
+        extension: ".m4a",
+        outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+        audioEncoder: Audio.AndroidAudioEncoder.AAC,
+        sampleRate: 44100,
+        numberOfChannels: 2,
+        bitRate: 128000,
+      },
+      ios: {
+        extension: ".m4a",
+        audioQuality: Audio.IOSAudioQuality.HIGH,
+        sampleRate: 44100,
+        numberOfChannels: 1,
+        bitRate: 128000,
+        outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+      },
+      web: {
+        mimeType: "audio/webm",
+        bitsPerSecond: 128000,
       },
     });
 
-    const raw = await res.text();
-    const data = JSON.parse(raw);
-
-    setResults(Array.isArray(data) ? data : []);
-  } catch (err) {
-    console.error("Nominatim error:", err);
-    setResults([]);
-  }
-}
-
-function getPrimaryRoute(data: any) {
-  if (Array.isArray(data?.routes) && data.routes.length > 0) {
-    return {
-      geometry: data.routes[0].geometry,
-      segments: data.routes[0].segments,
-    };
+    await newRecording.startAsync();
+    setRecording(newRecording);
   }
 
-  if (Array.isArray(data?.features) && data.features.length > 0) {
-    const feature = data.features[0];
-    return {
-      geometry: feature?.geometry,
-      segments: feature?.properties?.segments,
-    };
+  async function stopListening() {
+    setListening(false);
+
+    if (!recording) return;
+
+    await recording.stopAndUnloadAsync();
+    const recordingUri = recording.getURI();
+    setRecording(null);
+
+    if (!recordingUri) return;
+
+    const spokenText = await sendAudioToBackend(recordingUri);
+    setQuery(spokenText);
+    await searchPlaces(spokenText);
   }
 
-  return null;
-}
+  async function sendAudioToBackend(uri: string) {
+    const formData = new FormData();
+    formData.append("audio", {
+      uri,
+      name: "audio.m4a",
+      type: "audio/m4a",
+    } as any);
 
+    const response = await fetch(VOICE_INPUT_URL, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await response.json();
+
+    return data.text;
+  }
+
+  async function searchPlaces(text: string) {
+    if (!userLocation) return;
+
+    const { latitude, longitude } = userLocation.coords;
+    const left = longitude - 0.1;
+    const right = longitude + 0.1;
+    const top = latitude + 0.1;
+    const bottom = latitude - 0.1;
+
+    const url =
+      `https://nominatim.openstreetmap.org/search` +
+      `?q=${encodeURIComponent(text)}` +
+      `&format=json&addressdetails=1&limit=5` +
+      `&viewbox=${left},${top},${right},${bottom}` +
+      `&bounded=1`;
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Expo-App",
+        },
+      });
+
+      const raw = await response.text();
+      const data = JSON.parse(raw);
+      setResults(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Nominatim error:", error);
+      setResults([]);
+    }
+  }
+
+  function getPrimaryRoute(data: any) {
+    if (Array.isArray(data?.routes) && data.routes.length > 0) {
+      return {
+        geometry: data.routes[0].geometry,
+        segments: data.routes[0].segments,
+      };
+    }
+
+    if (Array.isArray(data?.features) && data.features.length > 0) {
+      const firstFeature = data.features[0];
+      return {
+        geometry: firstFeature?.geometry,
+        segments: firstFeature?.properties?.segments,
+      };
+    }
+
+    return null;
+  }
 
   async function selectLocation(item: any) {
     if (!userLocation) return;
@@ -196,28 +185,26 @@ function getPrimaryRoute(data: any) {
     const endLon = parseFloat(item.lon);
 
     try {
-      const res = await fetch("https://python-backend-i8iy.onrender.com/api/route", {
+      const response = await fetch(ROUTE_URL, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-            startLon,
-            startLat,
-            endLon,
-            endLat,
+          startLon,
+          startLat,
+          endLon,
+          endLat,
         }),
       });
 
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Route Backend Error: ", errorText);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Route backend error:", errorText);
         return;
       }
 
-      const data = await res.json();
-      console.log("ORS response:", data);
-
+      const data = await response.json();
       const route = getPrimaryRoute(data);
       if (!route) {
         console.error("No route returned:", data);
@@ -242,31 +229,21 @@ function getPrimaryRoute(data: any) {
         .filter((step: RouteStep) => step.instruction.length > 0);
 
       Speech.speak("Starting navigation");
-
       startRoute(item.display_name, steps);
       router.back();
 
-    } catch (err) {
-      console.error("Routing error:", err);
+    } catch (error) {
+      console.error("Routing error:", error);
     }
   }
 
   return (
     <ThemedView style={styles.container} pointerEvents="auto">
-
-
       <Pressable
         style={[styles.mic, listening && styles.active]}
-        onPressIn={() => {
-          console.log("PRESS IN");
-          startListening();
-        }}
-        onPressOut={() => {
-        console.log("PRESS OUT");
-        stopListening();
-        }}
+        onPressIn={startListening}
+        onPressOut={stopListening}
       >
-
         <ThemedText>
           {listening ? "Listening..." : "Hold to Speak"}
         </ThemedText>
@@ -280,10 +257,7 @@ function getPrimaryRoute(data: any) {
         data={results}
         keyExtractor={(item) => item.place_id.toString()}
         renderItem={({ item }) => (
-          <Pressable
-            style={styles.item}
-            onPress={() => selectLocation(item)}
-          >
+          <Pressable style={styles.item} onPress={() => selectLocation(item)}>
             <ThemedText>{item.display_name}</ThemedText>
           </Pressable>
         )}

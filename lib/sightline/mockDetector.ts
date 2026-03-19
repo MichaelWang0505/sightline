@@ -9,7 +9,7 @@ const SIGNS: SignType[] = [
   "EXIT_BOTH",
   "WALK",
   "STOP",
-  "TRAFFIC_LIGHT"
+  "TRAFFIC_LIGHT",
 ];
 
 const DISTANCES = [
@@ -23,13 +23,13 @@ const DISTANCES = [
 
 export function mockDetect(): Detection {
   const signType = SIGNS[Math.floor(Math.random() * SIGNS.length)];
-  const meta = SIGN_LABELS[signType];
+  const signInfo = SIGN_LABELS[signType];
 
   return {
     id: `${Date.now()}`,
     signType,
-    label: meta.label,
-    meaning: meta.meaning,
+    label: signInfo.label,
+    meaning: signInfo.meaning,
     distance: DISTANCES[Math.floor(Math.random() * DISTANCES.length)],
     confidence: Math.random() * 0.4 + 0.6,
     createdAt: Date.now(),

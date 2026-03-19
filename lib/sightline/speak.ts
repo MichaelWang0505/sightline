@@ -1,15 +1,15 @@
 import * as Speech from "expo-speech";
 import { Detection, Verbosity } from "./types";
 
-export function speakDetection(d: Detection, verbosity: Verbosity) {
-  let message = `${d.label} ahead`;
+export function speakDetection(detection: Detection, verbosity: Verbosity) {
+  let message = `${detection.label} ahead`;
 
-  if (d.distance !== "unknown") {
-    message += `, ${d.distance} away`;
+  if (detection.distance !== "unknown") {
+    message += `, ${detection.distance} away`;
   }
 
-  if (verbosity !== "low" && d.meaning) {
-    message += `. ${d.meaning}`;
+  if (verbosity !== "low" && detection.meaning) {
+    message += `. ${detection.meaning}`;
   }
 
   Speech.stop();

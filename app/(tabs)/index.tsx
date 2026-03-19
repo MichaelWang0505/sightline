@@ -2,17 +2,17 @@ import * as Location from "expo-location";
 import * as Speech from "expo-speech";
 import { useEffect, useRef, useState } from "react";
 import {
-  Image,
-  Pressable,
-  StyleSheet,
-  View,
+    Image,
+    Pressable,
+    StyleSheet,
+    View,
 } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 
 import { useRouteSession } from "@/lib/route-session";
-import { mockDetect } from "@/lib/sightline/mockDetector";
+import { detectAllFromBackend } from "@/lib/sightline/backendDetector";
 import { speakDetection } from "@/lib/sightline/speak";
 import type { Detection, Verbosity } from "@/lib/sightline/types";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -37,11 +37,14 @@ export default function ScanScreen() {
   const [scanning, setScanning] = useState(false);
   const [verbosity] = useState<Verbosity>("medium");
   const [last, setLast] = useState<Detection | null>(null);
+  const [currentDetections, setCurrentDetections] = useState<Detection[]>([]);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const routeWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const nextStepIndexRef = useRef(0);
   const lastInstructionAtRef = useRef(0);
+  const activeRouteRef = useRef(activeRoute);
+  const latestLocationRef = useRef<Location.LocationObject | null>(null);
 
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -64,6 +67,41 @@ export default function ScanScreen() {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
+  function isTurnInstruction(instruction: string): boolean {
+    const normalized = instruction.toLowerCase();
+    return /(turn|left|right|slight|bear|u-turn|roundabout)/.test(normalized);
+  }
+
+  function isCrosswalkSignalDetection(detection: Detection): boolean {
+    return detection.signType === "WALK" || detection.label === "Don't walk signal";
+  }
+
+  function shouldAnnounceCrosswalkAtTurn(): boolean {
+    const route = activeRouteRef.current;
+    if (!route) return false;
+
+    const step = route.steps[nextStepIndexRef.current];
+    if (!step) return false;
+    if (!isTurnInstruction(step.instruction)) return false;
+
+    if (!step.waypoint) return true;
+    const latest = latestLocationRef.current;
+    if (!latest) return false;
+
+    const distToTurn = haversineMeters(
+      latest.coords.latitude,
+      latest.coords.longitude,
+      step.waypoint.lat,
+      step.waypoint.lon
+    );
+
+    return distToTurn <= 35;
+  }
+
+  useEffect(() => {
+    activeRouteRef.current = activeRoute;
+  }, [activeRoute]);
+
   useEffect(() => {
     if (!activeRoute) {
       routeWatcherRef.current?.remove();
@@ -80,6 +118,7 @@ export default function ScanScreen() {
 
     const speakNextStep = async (location: Location.LocationObject) => {
       if (!activeRoute) return;
+      latestLocationRef.current = location;
       const speaking = await Speech.isSpeakingAsync();
       if (speaking) return;
       const now = Date.now();
@@ -116,7 +155,9 @@ export default function ScanScreen() {
     (async () => {
       const sub = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.High, distanceInterval: 4, timeInterval: 2000 },
-        (location) => { speakNextStep(location); }
+        (location) => {
+          speakNextStep(location);
+        }
       );
       routeWatcherRef.current = sub;
     })();
@@ -129,14 +170,31 @@ export default function ScanScreen() {
 
   async function start() {
     setScanning(true);
+
     timerRef.current = setInterval(async () => {
       if (cameraRef.current) {
-        await cameraRef.current.takePictureAsync({ base64: true, quality: 0.7 });
+        try {
+          const photo = await cameraRef.current.takePictureAsync({ quality: 0.7 });
+          const detections = await detectAllFromBackend(photo.uri);
+          setCurrentDetections(detections);
+          const detection = detections[0] ?? null;
+          if (!detection) return;
+
+          if (activeRouteRef.current) {
+            if (!shouldAnnounceCrosswalkAtTurn()) return;
+            const crosswalkSignal = detections.find(isCrosswalkSignalDetection);
+            if (!crosswalkSignal) return;
+            setLast(crosswalkSignal);
+            speakDetection(crosswalkSignal, verbosity);
+            return;
+          }
+
+          setLast(detection);
+          speakDetection(detection, verbosity);
+        } catch (error) {
+          console.warn("Sign detection request failed", error);
+        }
       }
-      const d = mockDetect();
-      if (d.confidence < 0.65) return;
-      setLast(d);
-      speakDetection(d, verbosity);
     }, 3000);
   }
 
@@ -145,10 +203,12 @@ export default function ScanScreen() {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
     setLast(null);
+    setCurrentDetections([]);
   }
 
   function repeatLast() {
     if (!last) return;
+
     speakDetection(last, verbosity);
   }
 
@@ -170,8 +230,6 @@ export default function ScanScreen() {
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: "#ffffff" }]}>
-
-      {/* Header with logo */}
       <View style={styles.header}>
         <Image
           source={require("@/assets/images/logo.png")}
@@ -185,7 +243,6 @@ export default function ScanScreen() {
         />
       </View>
 
-      {/* Start/Stop Button */}
       <Pressable
         style={[styles.button, scanning && styles.danger]}
         onPress={scanning ? stop : start}
@@ -197,17 +254,17 @@ export default function ScanScreen() {
         </ThemedText>
       </Pressable>
 
-      {/* Scanner Status */}
       <ThemedView style={styles.card}>
         <ThemedText type="defaultSemiBold" style={{ color: palette.textLight }}>
           Scanner Status
         </ThemedText>
         <ThemedText style={{ color: palette.textLight }}>
-          {last ? `${last.label} — ${last.distance}` : "No detections yet."}
+          {currentDetections.length > 0
+            ? currentDetections.map((d) => `${d.label} — ${d.distance}`).join(" | ")
+            : "No detections yet."}
         </ThemedText>
       </ThemedView>
 
-      {/* Two side-by-side action cards — flex:1 fills all remaining space */}
       <View style={styles.row}>
         <Pressable
           style={styles.actionCard}
@@ -235,7 +292,6 @@ export default function ScanScreen() {
       <View style={{ height: 0, width: 0, overflow: "hidden" }}>
         <CameraView ref={cameraRef} style={{ flex: 1 }} facing="back" />
       </View>
-
     </ThemedView>
   );
 }

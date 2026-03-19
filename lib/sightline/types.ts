@@ -8,7 +8,7 @@ export type SignType =
   | "EXIT_BOTH"
   | "WALK"
   | "STOP"
-  | "TRAFFIC_LIGHT"
+  | "TRAFFIC_LIGHT";
 
 export type DistancePhrase =
   | "very close"
