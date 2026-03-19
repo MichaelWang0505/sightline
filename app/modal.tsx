@@ -66,27 +66,27 @@ export default function NavigateScreen() {
 
   const rec = new Audio.Recording();
   await rec.prepareToRecordAsync({
-  android: {
+    android: {
+      extension: ".m4a",
+      outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+      audioEncoder: Audio.AndroidAudioEncoder.AAC,
+      sampleRate: 44100,
+      numberOfChannels: 2,
+      bitRate: 128000,
+    },
+    ios: {
     extension: ".m4a",
-    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+    audioQuality: Audio.IOSAudioQuality.HIGH,
     sampleRate: 44100,
-    numberOfChannels: 2,
+    numberOfChannels: 1,
     bitRate: 128000,
-  },
-  ios: {
-  extension: ".m4a",
-  audioQuality: Audio.IOSAudioQuality.HIGH,
-  sampleRate: 44100,
-  numberOfChannels: 1,
-  bitRate: 128000,
-  outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-  },
-  web: {
-    mimeType: "audio/webm",
-    bitsPerSecond: 128000,
-  },
-});
+    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+    },
+    web: {
+      mimeType: "audio/webm",
+      bitsPerSecond: 128000,
+    },
+  });
 
   await rec.startAsync();
   setRecording(rec);
@@ -131,40 +131,59 @@ async function sendAudioToBackend(uri: string) {
   return data.text;
 }
 
-  async function searchPlaces(text: string) {
-    if (!userLocation) return;
+async function searchPlaces(text: string) {
+  if (!userLocation) return;
 
-    const { latitude, longitude } = userLocation.coords;
+  const { latitude, longitude } = userLocation.coords;
 
-    // ~10km box around user
-    const left = longitude - 0.1;
-    const right = longitude + 0.1;
-    const top = latitude + 0.1;
-    const bottom = latitude - 0.1;
+  // ~10km box around user
+  const left = longitude - 0.1;
+  const right = longitude + 0.1;
+  const top = latitude + 0.1;
+  const bottom = latitude - 0.1;
 
-    const url =
-      `https://nominatim.openstreetmap.org/search` +
-      `?q=${encodeURIComponent(text)}` +
-      `&format=json&addressdetails=1&limit=5` +
-      `&viewbox=${left},${top},${right},${bottom}` +
-      `&bounded=1`;
+  const url =
+    `https://nominatim.openstreetmap.org/search` +
+    `?q=${encodeURIComponent(text)}` +
+    `&format=json&addressdetails=1&limit=5` +
+    `&viewbox=${left},${top},${right},${bottom}` +
+    `&bounded=1`;
 
-    try {
-      const res = await fetch(url, {
-        headers: {
-          "User-Agent": "Expo-App",
-        },
-      });
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Expo-App",
+      },
+    });
 
-      const raw = await res.text();
-      const data = JSON.parse(raw);
+    const raw = await res.text();
+    const data = JSON.parse(raw);
 
-      setResults(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Nominatim error:", err);
-      setResults([]);
-    }
+    setResults(Array.isArray(data) ? data : []);
+  } catch (err) {
+    console.error("Nominatim error:", err);
+    setResults([]);
   }
+}
+
+function getPrimaryRoute(data: any) {
+  if (Array.isArray(data?.routes) && data.routes.length > 0) {
+    return {
+      geometry: data.routes[0].geometry,
+      segments: data.routes[0].segments,
+    };
+  }
+
+  if (Array.isArray(data?.features) && data.features.length > 0) {
+    const feature = data.features[0];
+    return {
+      geometry: feature?.geometry,
+      segments: feature?.properties?.segments,
+    };
+  }
+
+  return null;
+}
 
 
   async function selectLocation(item: any) {
@@ -187,7 +206,6 @@ async function sendAudioToBackend(uri: string) {
             startLat,
             endLon,
             endLat,
-            geometry_format: "geojson",
         }),
       });
 
@@ -200,18 +218,18 @@ async function sendAudioToBackend(uri: string) {
       const data = await res.json();
       console.log("ORS response:", data);
 
-      if (!data.routes || data.routes.length === 0) {
+      const route = getPrimaryRoute(data);
+      if (!route) {
         console.error("No route returned:", data);
         Speech.speak("Sorry, I could not find a route.");
         return;
       }
 
-      const geometry = data.routes?.[0]?.geometry;
-      const coords: [number, number][] = Array.isArray(geometry?.coordinates)
-        ? geometry.coordinates
+      const coords: [number, number][] = Array.isArray(route.geometry?.coordinates)
+        ? route.geometry.coordinates
         : [];
 
-      const steps: RouteStep[] = (data.routes?.[0]?.segments?.[0]?.steps ?? [])
+      const steps: RouteStep[] = (route.segments?.[0]?.steps ?? [])
         .map((step: any) => {
           const wpIndex: number = step?.way_points?.[0] ?? -1;
           const coord = wpIndex >= 0 ? coords[wpIndex] : undefined;

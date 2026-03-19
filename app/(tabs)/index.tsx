@@ -11,9 +11,6 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 
 import { useRouteSession } from "@/lib/route-session";
-import { mockDetect } from "@/lib/sightline/mockDetector";
-import { speakDetection } from "@/lib/sightline/speak";
-import type { Detection, Verbosity } from "@/lib/sightline/types";
 import { CameraView, useCameraPermissions } from "expo-camera";
 
 import { useRouter } from "expo-router";
@@ -29,15 +26,40 @@ const palette = {
   accent: "#4ADE80",
 };
 
+function formatSignsForSpeech(data: Record<string, any>) {
+  const detected = Object.entries(data)
+    .filter(([, value]) => typeof value === "object" && value?.detected === true)
+    .map(([key]) => key.replace(/_/g, " "));
+
+  if (detected.length === 0) {
+    return "No signs detected.";
+  }
+
+  return `Detected ${detected.join(", ")}.`;
+}
+
+async function fetchSignsMessage() {
+  const res = await fetch("https://python-backend-i8iy.onrender.com/signs", {
+    method: "GET",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Signs request failed: ${res.status}`);
+  }
+
+  const data = await res.json();
+  return formatSignsForSpeech(data);
+}
+
 export default function ScanScreen() {
   const router = useRouter();
   const { activeRoute, endRoute } = useRouteSession();
 
   const [scanning, setScanning] = useState(false);
-  const [verbosity] = useState<Verbosity>("medium");
-  const [last, setLast] = useState<Detection | null>(null);
+  const [lastMessage, setLastMessage] = useState<string>("No detections yet.");
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeRouteRef = useRef(activeRoute);
   const routeWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const nextStepIndexRef = useRef(0);
   const lastInstructionAtRef = useRef(0);
@@ -46,114 +68,122 @@ export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
 
   useEffect(() => {
+    activeRouteRef.current = activeRoute;
+  }, [activeRoute]);
+
+  useEffect(() => {
   if (permission && !permission.granted) {
     requestPermission();
   }
 }, [permission]);
 
-  function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371000;
-    const toRad = (x: number) => (x * Math.PI) / 180;
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const toRad = (x: number) => (x * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+useEffect(() => {
+  if (!activeRoute) {
+    routeWatcherRef.current?.remove();
+    routeWatcherRef.current = null;
+    nextStepIndexRef.current = 0;
+    lastInstructionAtRef.current = 0;
+    Speech.stop();
+    return;
   }
 
-  useEffect(() => {
-    if (!activeRoute) {
-      routeWatcherRef.current?.remove();
-      routeWatcherRef.current = null;
-      nextStepIndexRef.current = 0;
-      lastInstructionAtRef.current = 0;
-      Speech.stop();
+  const steps = activeRoute.steps;
+  nextStepIndexRef.current = 0;
+  lastInstructionAtRef.current = 0;
+
+  const speakNextStep = async (location: Location.LocationObject) => {
+    if (!activeRoute) return;
+
+    const speaking = await Speech.isSpeakingAsync();
+    if (speaking) return;
+
+    // 3s debounce prevents re-firing the same step repeatedly
+    const now = Date.now();
+    if (now - lastInstructionAtRef.current < 3000) return;
+
+    const stepIndex = nextStepIndexRef.current;
+    if (stepIndex >= steps.length) {
+      Speech.speak(`You have arrived at ${activeRoute.destinationName}.`);
+      endRoute();
       return;
     }
 
-    const steps = activeRoute.steps;
-    nextStepIndexRef.current = 0;
-    lastInstructionAtRef.current = 0;
+    const step = steps[stepIndex];
 
-    const speakNextStep = async (location: Location.LocationObject) => {
-      if (!activeRoute) return;
-
-      const speaking = await Speech.isSpeakingAsync();
-      if (speaking) return;
-
-      // 3s debounce prevents re-firing the same step repeatedly
-      const now = Date.now();
-      if (now - lastInstructionAtRef.current < 3000) return;
-
-      const stepIndex = nextStepIndexRef.current;
-      if (stepIndex >= steps.length) {
-        Speech.speak(`You have arrived at ${activeRoute.destinationName}.`);
-        endRoute();
-        return;
-      }
-
-      const step = steps[stepIndex];
-
-      // Only speak when within 25 metres of the step's waypoint
-      if (step.waypoint) {
-        const dist = haversineMeters(
-          location.coords.latitude,
-          location.coords.longitude,
-          step.waypoint.lat,
-          step.waypoint.lon
-        );
-        if (dist > 25) return;
-      }
-
-      Speech.speak(step.instruction);
-      nextStepIndexRef.current = stepIndex + 1;
-      lastInstructionAtRef.current = now;
-    };
-
-    if (steps.length === 0) {
-      Speech.speak(`Navigation started to ${activeRoute.destinationName}.`);
-    } else {
-      Speech.speak(`Navigation started to ${activeRoute.destinationName}. ${steps[0].instruction}`);
-      nextStepIndexRef.current = 1;
-      lastInstructionAtRef.current = Date.now();
+    // Only speak when within 25 metres of the step's waypoint
+    if (step.waypoint) {
+      const dist = haversineMeters(
+        location.coords.latitude,
+        location.coords.longitude,
+        step.waypoint.lat,
+        step.waypoint.lon
+      );
+      if (dist > 25) return;
     }
 
-    (async () => {
-      const sub = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          distanceInterval: 4,
-          timeInterval: 2000,
-        },
-        (location) => {
-          speakNextStep(location);
-        }
-      );
+    Speech.speak(step.instruction);
+    nextStepIndexRef.current = stepIndex + 1;
+    lastInstructionAtRef.current = now;
+  };
 
-      routeWatcherRef.current = sub;
-    })();
+  if (steps.length === 0) {
+    Speech.speak(`Navigation started to ${activeRoute.destinationName}.`);
+  } else {
+    Speech.speak(`Navigation started to ${activeRoute.destinationName}. ${steps[0].instruction}`);
+    nextStepIndexRef.current = 1;
+    lastInstructionAtRef.current = Date.now();
+  }
 
-    return () => {
-      routeWatcherRef.current?.remove();
-      routeWatcherRef.current = null;
-    };
-  }, [activeRoute, endRoute]);
+  (async () => {
+    const sub = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.High,
+        distanceInterval: 4,
+        timeInterval: 2000,
+      },
+      (location) => {
+        speakNextStep(location);
+      }
+    );
+
+    routeWatcherRef.current = sub;
+  })();
+
+  return () => {
+    routeWatcherRef.current?.remove();
+    routeWatcherRef.current = null;
+  };
+}, [activeRoute, endRoute]);
 
   async function start() {
     setScanning(true);
 
     timerRef.current = setInterval(async () => {
-      if (cameraRef.current) {
-        const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.7 });
+      // Do not run sign polling while turn-by-turn navigation is active.
+      if (activeRouteRef.current) {
+        return;
       }
-      const d = mockDetect();
 
-      if (d.confidence < 0.65) return;
-
-      setLast(d);
-      speakDetection(d, verbosity);
+      try {
+        const message = await fetchSignsMessage();
+        setLastMessage(message);
+        Speech.stop();
+        Speech.speak(message);
+      } catch (error) {
+        console.warn("Could not fetch signs:", error);
+      }
     }, 3000);
   }
 
@@ -161,12 +191,11 @@ export default function ScanScreen() {
     setScanning(false);
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
-    setLast(null);
+    setLastMessage("No detections yet.");
   }
 
   function repeatLast() {
-    if (!last) return;
-    speakDetection(last, verbosity);
+    Speech.speak(lastMessage);
   }
 
   const statusText = scanning ? "Scanning for signs…" : "Scanner paused";
@@ -217,9 +246,7 @@ export default function ScanScreen() {
           Scanner Status
         </ThemedText>
 
-        <ThemedText style={{ color: palette.textLight }}>
-          {last ? `${last.label} — ${last.distance}` : "No detections yet."}
-        </ThemedText>
+        <ThemedText style={{ color: palette.textLight }}>{lastMessage}</ThemedText>
       </ThemedView>
 
       {/* Status Card */}
@@ -242,7 +269,7 @@ export default function ScanScreen() {
 
       {/* Navigate Button */}
       <Pressable
-        style={[styles.button, styles.secondary]}
+        style={[styles.button, activeRoute ? styles.danger : styles.secondary]}
         accessibilityRole="button"
         accessibilityLabel={activeRoute ? "End route" : "Navigate"}
         onPress={activeRoute ? endRoute : () => router.push("/modal")}

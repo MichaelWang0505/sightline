@@ -14,14 +14,14 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <RouteSessionProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <RouteSessionProvider>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style="auto" />
-      </ThemeProvider>
-    </RouteSessionProvider>
+      </RouteSessionProvider>
+    </ThemeProvider>
   );
 }
