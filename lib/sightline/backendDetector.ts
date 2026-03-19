@@ -1,7 +1,7 @@
+import { API_ENDPOINTS } from "@/constants/api";
+import { fetchWithTimeout } from "@/lib/network";
 import { SIGN_LABELS } from "./signLabels";
 import type { Detection, SignType } from "./types";
-
-const BACKEND_URL = "https://python-backend-i8iy.onrender.com/signs";
 
 type BackendSign = {
   detected: boolean;
@@ -67,10 +67,12 @@ const SIGN_MAP: Record<string, Mapping> = {
 
 function distanceToPhrase(distance: number): Detection["distance"] {
   if (!Number.isFinite(distance)) return "unknown";
-  if (distance <= 15) return "very close";
-  if (distance <= 30) return "about 5 feet";
-  if (distance <= 45) return "about 8 feet";
-  if (distance <= 65) return "about 10 feet";
+  const feet = distance * 3.28084;
+
+  if (feet <= 3) return "very close";
+  if (feet <= 6.5) return "about 5 feet";
+  if (feet <= 9) return "about 8 feet";
+  if (feet <= 12.5) return "about 10 feet";
   return "about 15 feet";
 }
 
@@ -126,6 +128,21 @@ function guessMimeType(fileName: string): string {
   return "image/jpeg";
 }
 
+function isBackendSign(value: unknown): value is BackendSign {
+  if (typeof value !== "object" || value === null) return false;
+  const item = value as Record<string, unknown>;
+  return (
+    typeof item.detected === "boolean" &&
+    typeof item.direction === "string" &&
+    typeof item.distance === "number"
+  );
+}
+
+function isBackendSignsResponse(value: unknown): value is BackendSignsResponse {
+  if (typeof value !== "object" || value === null) return false;
+  return Object.values(value).every(isBackendSign);
+}
+
 async function buildImageFormData(imageUri: string): Promise<FormData> {
   const formData = new FormData();
   const fileName = imageUri.split("/").pop() || "frame.jpg";
@@ -146,7 +163,7 @@ async function buildImageFormData(imageUri: string): Promise<FormData> {
       uri: imageUri,
       name: fileName,
       type: guessMimeType(fileName),
-    } as any
+    } as unknown as Blob
   );
 
   return formData;
@@ -155,9 +172,10 @@ async function buildImageFormData(imageUri: string): Promise<FormData> {
 async function requestSignsPayload(imageUri: string): Promise<BackendSignsResponse> {
   const formData = await buildImageFormData(imageUri);
 
-  const response = await fetch(BACKEND_URL, {
+  const response = await fetchWithTimeout(API_ENDPOINTS.signs, {
     method: "POST",
     body: formData,
+    timeoutMs: 10000,
   });
 
   if (!response.ok) {
@@ -165,7 +183,12 @@ async function requestSignsPayload(imageUri: string): Promise<BackendSignsRespon
     throw new Error(`Sign detection failed (${response.status}): ${errorText}`);
   }
 
-  return (await response.json()) as BackendSignsResponse;
+  const payload: unknown = await response.json();
+  if (!isBackendSignsResponse(payload)) {
+    throw new Error("Sign detection response shape was invalid");
+  }
+
+  return payload;
 }
 
 export async function detectFromBackend(imageUri: string): Promise<Detection | null> {

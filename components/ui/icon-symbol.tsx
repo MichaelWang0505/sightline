@@ -6,7 +6,7 @@ import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
 type IconSymbolName = keyof typeof MAPPING;
 
-// Mapping SF Symbol names to Material Icons equivalents for Android/web
+// Mapping SF symbol names to material icons
 const MAPPING = {
   'house.fill': 'home',
   'paperplane.fill': 'send',

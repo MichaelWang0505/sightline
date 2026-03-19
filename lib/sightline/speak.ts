@@ -13,5 +13,10 @@ export function speakDetection(detection: Detection, verbosity: Verbosity) {
   }
 
   Speech.stop();
-  Speech.speak(message, { rate: 1.0 });
+  Speech.speak(message, {
+    rate: 1.0,
+    onError: (error) => {
+      console.warn("Speech output failed", error);
+    },
+  });
 }

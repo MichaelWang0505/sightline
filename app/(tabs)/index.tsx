@@ -2,14 +2,15 @@ import * as Location from "expo-location";
 import * as Speech from "expo-speech";
 import { useEffect, useRef, useState } from "react";
 import {
-    Image,
-    Pressable,
-    StyleSheet,
-    View,
+  Image,
+  Pressable,
+  StyleSheet,
+  View,
 } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { AppPalette } from "@/constants/theme";
 
 import { useRouteSession } from "@/lib/route-session";
 import { detectAllFromBackend } from "@/lib/sightline/backendDetector";
@@ -18,17 +19,7 @@ import type { Detection, Verbosity } from "@/lib/sightline/types";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 
-const palette = {
-  bg: "#0F1220",
-  card: "#0d2340",
-  primary: "#3A7CFF",
-  danger: "#D64545",
-  secondary: "#2D2F3E",
-  textLight: "#FFFFFF",
-  textSub: "#C7CBDA",
-  textDark: "#0d2340",
-  accent: "#4ADE80",
-};
+const palette = AppPalette.light;
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -46,6 +37,7 @@ export default function ScanScreen() {
   const lastInstructionAtRef = useRef(0);
   const activeRouteRef = useRef(activeRoute);
   const latestLocationRef = useRef<Location.LocationObject | null>(null);
+  const processingRef = useRef(false);
 
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -54,7 +46,18 @@ export default function ScanScreen() {
     if (permission && !permission.granted) {
       requestPermission();
     }
-  }, [permission]);
+  }, [permission, requestPermission]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      routeWatcherRef.current?.remove();
+      routeWatcherRef.current = null;
+    };
+  }, []);
 
   function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
@@ -173,9 +176,13 @@ export default function ScanScreen() {
   }, [activeRoute, endRoute]);
 
   async function start() {
+    if (timerRef.current) return;
     setScanning(true);
 
     timerRef.current = setInterval(async () => {
+      if (processingRef.current) return;
+      processingRef.current = true;
+
       if (cameraRef.current) {
         try {
           const photo = await cameraRef.current.takePictureAsync({ quality: 0.7 });
@@ -198,7 +205,11 @@ export default function ScanScreen() {
           speakDetection(detection, verbosity);
         } catch (error) {
           console.warn("Sign detection request failed", error);
+        } finally {
+          processingRef.current = false;
         }
+      } else {
+        processingRef.current = false;
       }
     }, 3000);
   }
@@ -207,6 +218,7 @@ export default function ScanScreen() {
     setScanning(false);
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
+    processingRef.current = false;
     setLast(null);
     setCurrentDetections([]);
   }
@@ -313,7 +325,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingTop: 40,
     paddingBottom: 10,
-    gap: -100,
+    gap: 12,
   },
   logo: {
     width: 80,

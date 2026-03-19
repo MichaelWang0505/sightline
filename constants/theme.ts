@@ -22,6 +22,35 @@ export const Colors = {
   },
 };
 
+export const AppPalette = {
+  light: {
+    card: '#0d2340',
+    primary: '#3A7CFF',
+    danger: '#D64545',
+    secondary: '#2D2F3E',
+    textLight: '#FFFFFF',
+    textSubtle: '#C7CBDA',
+    textDark: '#0d2340',
+    accent: '#4ADE80',
+    navMicIdle: '#DDDDDD',
+    navMicActive: '#FFCCCC',
+    navDivider: '#CCCCCC',
+  },
+  dark: {
+    card: '#1B2434',
+    primary: '#4A8CFF',
+    danger: '#E25B5B',
+    secondary: '#2A3140',
+    textLight: '#FFFFFF',
+    textSubtle: '#B9C2D8',
+    textDark: '#ECEDEE',
+    accent: '#52E38A',
+    navMicIdle: '#2B2F38',
+    navMicActive: '#5C2C33',
+    navDivider: '#3C4452',
+  },
+} as const;
+
 export const Fonts = Platform.select({
   ios: {
     sans: 'system-ui',

@@ -7,10 +7,53 @@ import { FlatList, Pressable, StyleSheet } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { API_ENDPOINTS } from "@/constants/api";
+import { AppPalette } from "@/constants/theme";
+import { fetchWithTimeout } from "@/lib/network";
 import { type RouteStep, useRouteSession } from "@/lib/route-session";
 
-const VOICE_INPUT_URL = "https://python-backend-i8iy.onrender.com/voice_input";
-const ROUTE_URL = "https://python-backend-i8iy.onrender.com/api/route";
+const palette = AppPalette.light;
+
+type NominatimResult = {
+  place_id: number;
+  lat: string;
+  lon: string;
+  display_name: string;
+};
+
+type RouteBackendStep = {
+  instruction?: string;
+  distance?: number;
+  way_points?: number[];
+};
+
+type RouteGeometry = {
+  coordinates?: [number, number][];
+};
+
+type PrimaryRoute = {
+  geometry?: RouteGeometry;
+  segments?: { steps?: RouteBackendStep[] }[];
+};
+
+function isNominatimResult(value: unknown): value is NominatimResult {
+  if (typeof value !== "object" || value === null) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.place_id === "number" &&
+    typeof row.lat === "string" &&
+    typeof row.lon === "string" &&
+    typeof row.display_name === "string"
+  );
+}
+
+function isPrimaryRoute(value: unknown): value is PrimaryRoute {
+  if (typeof value !== "object" || value === null) return false;
+  const route = value as Record<string, unknown>;
+  if (!route.geometry || typeof route.geometry !== "object") return false;
+  if (!Array.isArray(route.segments)) return true;
+  return true;
+}
 
 export default function NavigateScreen() {
   const router = useRouter();
@@ -18,7 +61,8 @@ export default function NavigateScreen() {
 
   const [listening, setListening] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<NominatimResult[]>([]);
+  const [loadingRoute, setLoadingRoute] = useState(false);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
 
@@ -45,19 +89,22 @@ export default function NavigateScreen() {
     if (recording) {
       try {
         await recording.stopAndUnloadAsync();
-      } catch {
+      } catch (error) {
+        console.warn("Failed to stop previous recording", error);
       }
       setRecording(null);
     }
 
-    setListening(true);
     setResults([]);
 
     const { status } = await Audio.requestPermissionsAsync();
     if (status !== "granted") {
       console.warn("Mic permission denied");
+      setListening(false);
       return;
     }
+
+    setListening(true);
 
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: true,
@@ -114,13 +161,24 @@ export default function NavigateScreen() {
       uri,
       name: "audio.m4a",
       type: "audio/m4a",
-    } as any);
+    } as unknown as Blob);
 
-    const response = await fetch(VOICE_INPUT_URL, {
+    const response = await fetchWithTimeout(API_ENDPOINTS.voiceInput, {
       method: "POST",
       body: formData,
+      timeoutMs: 10000,
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Voice input failed (${response.status}): ${errorText}`);
+    }
+
     const data = await response.json();
+
+    if (typeof data?.text !== "string") {
+      throw new Error("Voice input response missing text");
+    }
 
     return data.text;
   }
@@ -143,42 +201,66 @@ export default function NavigateScreen() {
       `&bounded=1`;
 
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         headers: {
-          "User-Agent": "Expo-App",
+          "User-Agent": "SightlineApp/1.0 (TSA Software Development)",
         },
+        timeoutMs: 10000,
       });
 
-      const raw = await response.text();
-      const data = JSON.parse(raw);
-      setResults(Array.isArray(data) ? data : []);
+      if (!response.ok) {
+        console.error(`Nominatim failed (${response.status})`);
+        setResults([]);
+        return;
+      }
+
+      const data: unknown = await response.json();
+      if (!Array.isArray(data)) {
+        setResults([]);
+        return;
+      }
+
+      setResults(data.filter(isNominatimResult));
     } catch (error) {
       console.error("Nominatim error:", error);
       setResults([]);
     }
   }
 
-  function getPrimaryRoute(data: any) {
-    if (Array.isArray(data?.routes) && data.routes.length > 0) {
-      return {
-        geometry: data.routes[0].geometry,
-        segments: data.routes[0].segments,
+  function getPrimaryRoute(data: unknown): PrimaryRoute | null {
+    if (typeof data !== "object" || data === null) return null;
+
+    const root = data as Record<string, unknown>;
+    const routes = root.routes;
+    if (Array.isArray(routes) && routes.length > 0) {
+      const firstRoute = routes[0] as Record<string, unknown>;
+      const route = {
+        geometry: firstRoute.geometry,
+        segments: firstRoute.segments,
       };
+      return isPrimaryRoute(route) ? route : null;
     }
 
     // Falling back to GeoJSON feature collection format
-    if (Array.isArray(data?.features) && data.features.length > 0) {
-      const firstFeature = data.features[0];
-      return {
-        geometry: firstFeature?.geometry,
-        segments: firstFeature?.properties?.segments,
+    const features = root.features;
+    if (Array.isArray(features) && features.length > 0) {
+      const firstFeature = features[0] as Record<string, unknown>;
+      const firstFeatureProps =
+        typeof firstFeature.properties === "object" && firstFeature.properties !== null
+          ? (firstFeature.properties as Record<string, unknown>)
+          : undefined;
+
+      const route = {
+        geometry: firstFeature.geometry,
+        segments: firstFeatureProps?.segments,
       };
+      return isPrimaryRoute(route) ? route : null;
     }
 
     return null;
   }
 
-  async function selectLocation(item: any) {
+  async function selectLocation(item: NominatimResult) {
     if (!userLocation) return;
 
     const startLat = userLocation.coords.latitude;
@@ -186,9 +268,14 @@ export default function NavigateScreen() {
 
     const endLat = parseFloat(item.lat);
     const endLon = parseFloat(item.lon);
+    if (!Number.isFinite(endLat) || !Number.isFinite(endLon)) {
+      console.error("Invalid destination coordinates", { lat: item.lat, lon: item.lon });
+      return;
+    }
 
     try {
-      const response = await fetch(ROUTE_URL, {
+      setLoadingRoute(true);
+      const response = await fetchWithTimeout(API_ENDPOINTS.route, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -199,6 +286,7 @@ export default function NavigateScreen() {
           endLon,
           endLat,
         }),
+        timeoutMs: 10000,
       });
 
       if (!response.ok) {
@@ -207,7 +295,7 @@ export default function NavigateScreen() {
         return;
       }
 
-      const data = await response.json();
+      const data: unknown = await response.json();
       const route = getPrimaryRoute(data);
       if (!route) {
         console.error("No route returned:", data);
@@ -220,12 +308,12 @@ export default function NavigateScreen() {
         : [];
 
       const steps: RouteStep[] = (route.segments?.[0]?.steps ?? [])
-        .map((step: any) => {
-          const wpIndex: number = step?.way_points?.[0] ?? -1;
+        .map((step: RouteBackendStep) => {
+          const wpIndex: number = step.way_points?.[0] ?? -1;
           const coord = wpIndex >= 0 ? coords[wpIndex] : undefined;
           return {
-            instruction: String(step?.instruction ?? ""),
-            distance: typeof step?.distance === "number" ? step.distance : undefined,
+            instruction: typeof step.instruction === "string" ? step.instruction : "",
+            distance: typeof step.distance === "number" ? step.distance : undefined,
             waypoint: coord ? { lat: coord[1], lon: coord[0] } : undefined,
           };
         })
@@ -237,6 +325,8 @@ export default function NavigateScreen() {
 
     } catch (error) {
       console.error("Routing error:", error);
+    } finally {
+      setLoadingRoute(false);
     }
   }
 
@@ -246,6 +336,9 @@ export default function NavigateScreen() {
         style={[styles.mic, listening && styles.active]}
         onPressIn={startListening}
         onPressOut={stopListening}
+        accessibilityRole="button"
+        accessibilityLabel={listening ? "Recording destination" : "Hold to record destination"}
+        accessibilityHint="Hold to speak your destination, then release to search places"
       >
         <ThemedText>
           {listening ? "Listening..." : "Hold to Speak"}
@@ -260,7 +353,14 @@ export default function NavigateScreen() {
         data={results}
         keyExtractor={(item) => item.place_id.toString()}
         renderItem={({ item }) => (
-          <Pressable style={styles.item} onPress={() => selectLocation(item)}>
+          <Pressable
+            style={styles.item}
+            onPress={() => selectLocation(item)}
+            disabled={loadingRoute}
+            accessibilityRole="button"
+            accessibilityLabel={`Navigate to ${item.display_name}`}
+            accessibilityHint="Starts walking navigation to this destination"
+          >
             <ThemedText>{item.display_name}</ThemedText>
           </Pressable>
         )}
@@ -275,13 +375,13 @@ const styles = StyleSheet.create({
     marginVertical: 20,
     padding: 20,
     borderRadius: 12,
-    backgroundColor: "#ddd",
+    backgroundColor: palette.navMicIdle,
     alignItems: "center",
   },
-  active: { backgroundColor: "#ffcccc" },
+  active: { backgroundColor: palette.navMicActive },
   item: {
     padding: 15,
     borderBottomWidth: 1,
-    borderColor: "#ccc",
+    borderColor: palette.navDivider,
   },
 });
