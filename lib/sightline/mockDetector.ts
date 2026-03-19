@@ -21,6 +21,7 @@ const DISTANCES = [
   "unknown",
 ] as const;
 
+// Returns a random mock Detection for testing without a live backend
 export function mockDetect(): Detection {
   const signType = SIGNS[Math.floor(Math.random() * SIGNS.length)];
   const signInfo = SIGN_LABELS[signType];

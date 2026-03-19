@@ -1,3 +1,4 @@
+// low = name + distance only, medium/high = also reads the meaning
 export type Verbosity = "low" | "medium" | "high";
 
 export type SignType =

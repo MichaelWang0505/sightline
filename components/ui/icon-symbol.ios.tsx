@@ -1,6 +1,7 @@
 import { SymbolView, SymbolViewProps, SymbolWeight } from 'expo-symbols';
 import { StyleProp, ViewStyle } from 'react-native';
 
+// iOS-only: renders native SF Symbols via expo-symbols. Other platforms use icon-symbol.tsx.
 export function IconSymbol({
   name,
   size = 24,

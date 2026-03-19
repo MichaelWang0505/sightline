@@ -35,6 +35,7 @@ export default function NavigateScreen() {
         return;
       }
 
+      // Fetching the user's current position to use as the route origin
       const loc = await Location.getCurrentPositionAsync({});
       setUserLocation(loc);
     })();
@@ -127,6 +128,7 @@ export default function NavigateScreen() {
   async function searchPlaces(text: string) {
     if (!userLocation) return;
 
+    // Building a bounding box of ±0.1 degrees around the user's current position
     const { latitude, longitude } = userLocation.coords;
     const left = longitude - 0.1;
     const right = longitude + 0.1;
@@ -164,6 +166,7 @@ export default function NavigateScreen() {
       };
     }
 
+    // Falling back to GeoJSON feature collection format
     if (Array.isArray(data?.features) && data.features.length > 0) {
       const firstFeature = data.features[0];
       return {

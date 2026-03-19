@@ -21,6 +21,7 @@ type RankedDetection = Detection & {
   sortDistance: number;
 };
 
+// Maps backend sign key strings to Detection fields
 const SIGN_MAP: Record<string, Mapping> = {
   exit_sign: {
     signType: "EXIT",
@@ -113,6 +114,7 @@ function parseDetections(payload: BackendSignsResponse): Detection[] {
     .map(([signKey, signData], index) => mapEntryToRankedDetection(signKey, signData, index, now))
     .filter(isRankedDetection)
     .sort((a, b) => a.sortDistance - b.sortDistance)
+    // Stripping the sortDistance field before returning final Detection objects
     .map(({ sortDistance, ...detection }) => detection);
 }
 
@@ -129,11 +131,13 @@ async function buildImageFormData(imageUri: string): Promise<FormData> {
   const fileName = imageUri.split("/").pop() || "frame.jpg";
 
   try {
+    // Fetching the image as a Blob for web compatibility
     const imageResponse = await fetch(imageUri);
     const imageBlob = await imageResponse.blob();
     formData.append("image", imageBlob, fileName);
     return formData;
   } catch {
+    // Falling back to the React Native file URI object if Blob fetch fails
   }
 
   formData.append(

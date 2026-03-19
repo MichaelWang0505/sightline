@@ -39,6 +39,7 @@ export default function ScanScreen() {
   const [last, setLast] = useState<Detection | null>(null);
   const [currentDetections, setCurrentDetections] = useState<Detection[]>([]);
 
+  // Refs hold values that survive re-renders without triggering them
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const routeWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const nextStepIndexRef = useRef(0);
@@ -95,6 +96,7 @@ export default function ScanScreen() {
       step.waypoint.lon
     );
 
+    // Only announce crosswalk signals when within 35m of the upcoming turn
     return distToTurn <= 35;
   }
 
@@ -122,6 +124,7 @@ export default function ScanScreen() {
       const speaking = await Speech.isSpeakingAsync();
       if (speaking) return;
       const now = Date.now();
+      // Don't repeat the same instruction within 3 seconds
       if (now - lastInstructionAtRef.current < 3000) return;
       const stepIndex = nextStepIndexRef.current;
       if (stepIndex >= steps.length) {
@@ -137,6 +140,7 @@ export default function ScanScreen() {
           step.waypoint.lat,
           step.waypoint.lon
         );
+        // Wait until within 25m of the waypoint before speaking the instruction
         if (dist > 25) return;
       }
       Speech.speak(step.instruction);
@@ -180,6 +184,7 @@ export default function ScanScreen() {
           const detection = detections[0] ?? null;
           if (!detection) return;
 
+          // Only announce crosswalk signals near upcoming turns when navigating
           if (activeRouteRef.current) {
             if (!shouldAnnounceCrosswalkAtTurn()) return;
             const crosswalkSignal = detections.find(isCrosswalkSignalDetection);
@@ -289,6 +294,7 @@ export default function ScanScreen() {
         </Pressable>
       </View>
 
+      {/* Camera is hidden off-screen so it can capture frames without showing a preview */}
       <View style={{ height: 0, width: 0, overflow: "hidden" }}>
         <CameraView ref={cameraRef} style={{ flex: 1 }} facing="back" />
       </View>
@@ -361,3 +367,4 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+
