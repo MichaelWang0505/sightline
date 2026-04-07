@@ -1,3 +1,4 @@
+import polyline from "@mapbox/polyline";
 import { Audio } from "expo-av";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
@@ -79,7 +80,6 @@ export default function NavigateScreen() {
         return;
       }
 
-      // Fetching the user's current position to use as the route origin
       const loc = await Location.getCurrentPositionAsync({});
       setUserLocation(loc);
     })();
@@ -150,9 +150,14 @@ export default function NavigateScreen() {
 
     if (!recordingUri) return;
 
-    const spokenText = await sendAudioToBackend(recordingUri);
-    setQuery(spokenText);
-    await searchPlaces(spokenText);
+    try {
+      const spokenText = await sendAudioToBackend(recordingUri);
+      setQuery(spokenText);
+      await searchPlaces(spokenText);
+    } catch (error) {
+      console.error("Voice input error:", error);
+      Speech.speak("Sorry, I couldn't understand that. Please try again.");
+    }
   }
 
   async function sendAudioToBackend(uri: string) {
@@ -166,7 +171,7 @@ export default function NavigateScreen() {
     const response = await fetchWithTimeout(API_ENDPOINTS.voiceInput, {
       method: "POST",
       body: formData,
-      timeoutMs: 10000,
+      timeoutMs: 30000,
     });
 
     if (!response.ok) {
@@ -186,7 +191,6 @@ export default function NavigateScreen() {
   async function searchPlaces(text: string) {
     if (!userLocation) return;
 
-    // Building a bounding box of ±0.1 degrees around the user's current position
     const { latitude, longitude } = userLocation.coords;
     const left = longitude - 0.1;
     const right = longitude + 0.1;
@@ -234,8 +238,16 @@ export default function NavigateScreen() {
     const routes = root.routes;
     if (Array.isArray(routes) && routes.length > 0) {
       const firstRoute = routes[0] as Record<string, unknown>;
+
+      // Decode polyline string into coordinate array if needed
+      let geometry = firstRoute.geometry;
+      if (typeof geometry === "string") {
+        const decoded = polyline.decode(geometry);
+        geometry = { coordinates: decoded.map(([lat, lng]) => [lng, lat] as [number, number]) };
+      }
+
       const route = {
-        geometry: firstRoute.geometry,
+        geometry,
         segments: firstRoute.segments,
       };
       return isPrimaryRoute(route) ? route : null;

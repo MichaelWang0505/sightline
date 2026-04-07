@@ -146,46 +146,72 @@ function isBackendSignsResponse(value: unknown): value is BackendSignsResponse {
 async function buildImageFormData(imageUri: string): Promise<FormData> {
   const formData = new FormData();
   const fileName = imageUri.split("/").pop() || "frame.jpg";
+  const isLocalUri = /^(file|content|ph):/i.test(imageUri);
 
-  try {
-    // Fetching the image as a Blob for web compatibility
-    const imageResponse = await fetch(imageUri);
-    const imageBlob = await imageResponse.blob();
-    formData.append("image", imageBlob, fileName);
+  if (isLocalUri) {
+    // Native camera URIs should be sent as RN file objects.
+    formData.append(
+      "image",
+      {
+        uri: imageUri,
+        name: fileName,
+        type: guessMimeType(fileName),
+      } as unknown as Blob
+    );
     return formData;
-  } catch {
-    // Falling back to the React Native file URI object if Blob fetch fails
   }
 
-  formData.append(
-    "image",
-    {
-      uri: imageUri,
-      name: fileName,
-      type: guessMimeType(fileName),
-    } as unknown as Blob
-  );
+  try {
+    // Web URLs/data URIs should be uploaded as Blob.
+    const imageResponse = await fetch(imageUri);
+    if (!imageResponse.ok) {
+      throw new Error(`Image fetch failed (${imageResponse.status})`);
+    }
 
-  return formData;
+    const imageBlob = await imageResponse.blob();
+    if (imageBlob.size <= 0) {
+      throw new Error("Image blob was empty");
+    }
+
+    formData.append("image", imageBlob, fileName);
+    return formData;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "unknown reason";
+    throw new Error(`Could not prepare image payload from URI (${reason})`);
+  }
 }
 
 async function requestSignsPayload(imageUri: string): Promise<BackendSignsResponse> {
   const formData = await buildImageFormData(imageUri);
+  const timeoutMs = 45000;
+  const startedAt = Date.now();
 
   const response = await fetchWithTimeout(API_ENDPOINTS.signs, {
     method: "POST",
     body: formData,
-    timeoutMs: 10000,
+    timeoutMs,
   });
 
+  const elapsedMs = Date.now() - startedAt;
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Sign detection failed (${response.status}): ${errorText}`);
+    const errorText = (await response.text()).slice(0, 300);
+    throw new Error(
+      `Sign detection failed (${response.status}) after ${elapsedMs}ms: ${errorText}`
+    );
   }
 
-  const payload: unknown = await response.json();
+  const responseText = await response.text();
+  let payload: unknown;
+  try {
+    payload = JSON.parse(responseText) as unknown;
+  } catch {
+    throw new Error(
+      `Sign detection returned non-JSON after ${elapsedMs}ms: ${responseText.slice(0, 300)}`
+    );
+  }
+
   if (!isBackendSignsResponse(payload)) {
-    throw new Error("Sign detection response shape was invalid");
+    throw new Error(`Sign detection response shape was invalid after ${elapsedMs}ms`);
   }
 
   return payload;

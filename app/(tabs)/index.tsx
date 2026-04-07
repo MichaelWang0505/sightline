@@ -10,16 +10,37 @@ import {
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { API_BASE_URL, USE_MOCK_DETECTOR } from "@/constants/api";
 import { AppPalette } from "@/constants/theme";
 
 import { useRouteSession } from "@/lib/route-session";
 import { detectAllFromBackend } from "@/lib/sightline/backendDetector";
+import { mockDetect } from "@/lib/sightline/mockDetector";
 import { speakDetection } from "@/lib/sightline/speak";
 import type { Detection, Verbosity } from "@/lib/sightline/types";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 
 const palette = AppPalette.light;
+
+function describeDetectionBackendError(error: unknown): string {
+  const message = error instanceof Error ? error.message : "Unknown backend error";
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("timed out") || normalized.includes("aborted")) {
+    return "Detection request timed out. Backend may be unreachable or blocked on this network.";
+  }
+
+  if (normalized.includes("network request failed") || normalized.includes("failed to fetch")) {
+    return "Could not reach detection backend. Check EXPO_PUBLIC_API_BASE_URL and network access.";
+  }
+
+  if (normalized.includes("sign detection failed")) {
+    return message;
+  }
+
+  return `Detection failed: ${message}`;
+}
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -29,6 +50,7 @@ export default function ScanScreen() {
   const [verbosity] = useState<Verbosity>("medium");
   const [last, setLast] = useState<Detection | null>(null);
   const [currentDetections, setCurrentDetections] = useState<Detection[]>([]);
+  const [lastBackendError, setLastBackendError] = useState<string | null>(null);
 
   // Refs hold values that survive re-renders without triggering them
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -38,9 +60,13 @@ export default function ScanScreen() {
   const activeRouteRef = useRef(activeRoute);
   const latestLocationRef = useRef<Location.LocationObject | null>(null);
   const processingRef = useRef(false);
+  const consecutiveFailuresRef = useRef(0);
+  const backendCooldownUntilRef = useRef(0);
+  const lastLoggedErrorRef = useRef<string | null>(null);
 
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
+  const usingMockDetector = USE_MOCK_DETECTOR;
 
   useEffect(() => {
     if (permission && !permission.granted) {
@@ -181,13 +207,25 @@ export default function ScanScreen() {
 
     timerRef.current = setInterval(async () => {
       if (processingRef.current) return;
+
+      const now = Date.now();
+      if (now < backendCooldownUntilRef.current && !usingMockDetector) {
+        return;
+      }
+
       processingRef.current = true;
 
       if (cameraRef.current) {
         try {
           const photo = await cameraRef.current.takePictureAsync({ quality: 0.7 });
-          const detections = await detectAllFromBackend(photo.uri);
+          const detections = usingMockDetector
+            ? [mockDetect()]
+            : await detectAllFromBackend(photo.uri);
           setCurrentDetections(detections);
+          setLastBackendError(null);
+          consecutiveFailuresRef.current = 0;
+          backendCooldownUntilRef.current = 0;
+          lastLoggedErrorRef.current = null;
           const detection = detections[0] ?? null;
           if (!detection) return;
 
@@ -204,7 +242,23 @@ export default function ScanScreen() {
           setLast(detection);
           speakDetection(detection, verbosity);
         } catch (error) {
-          console.warn("Sign detection request failed", error);
+          const uiMessage = describeDetectionBackendError(error);
+          setLastBackendError(uiMessage);
+
+          if (lastLoggedErrorRef.current !== uiMessage) {
+            console.warn("Sign detection request failed", error);
+            lastLoggedErrorRef.current = uiMessage;
+          }
+
+          consecutiveFailuresRef.current += 1;
+          if (!USE_MOCK_DETECTOR && consecutiveFailuresRef.current >= 3) {
+            const cooldownMs = 30000;
+            backendCooldownUntilRef.current = Date.now() + cooldownMs;
+            setLastBackendError(
+              "Detection backend is failing repeatedly. Pausing requests for 30 seconds for diagnostics."
+            );
+            consecutiveFailuresRef.current = 0;
+          }
         } finally {
           processingRef.current = false;
         }
@@ -219,8 +273,12 @@ export default function ScanScreen() {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
     processingRef.current = false;
+    consecutiveFailuresRef.current = 0;
+    backendCooldownUntilRef.current = 0;
+    lastLoggedErrorRef.current = null;
     setLast(null);
     setCurrentDetections([]);
+    setLastBackendError(null);
   }
 
   function repeatLast() {
@@ -279,6 +337,14 @@ export default function ScanScreen() {
           {currentDetections.length > 0
             ? currentDetections.map((d) => `${d.label} — ${d.distance}`).join(" | ")
             : "No detections yet."}
+        </ThemedText>
+        {lastBackendError ? (
+          <ThemedText style={{ color: "#ffd7d7" }}>
+            Detection backend error: {lastBackendError}
+          </ThemedText>
+        ) : null}
+        <ThemedText style={{ color: palette.textLight }}>
+          Source: {usingMockDetector ? "Mock detector" : `Backend (${API_BASE_URL})`}
         </ThemedText>
       </ThemedView>
 
