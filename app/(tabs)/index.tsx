@@ -146,12 +146,15 @@ export default function ScanScreen() {
     const steps = activeRoute.steps;
     nextStepIndexRef.current = 0;
     lastInstructionAtRef.current = 0;
+    console.log("All steps:", JSON.stringify(steps, null, 2));
 
     const speakNextStep = async (location: Location.LocationObject) => {
       if (!activeRoute) return;
       latestLocationRef.current = location;
-      const speaking = await Speech.isSpeakingAsync();
-      if (speaking) return;
+      console.log("GPS update received, stepIndex:", nextStepIndexRef.current, "steps total:", steps.length);
+      const step0 = steps[nextStepIndexRef.current];
+      console.log("Step 0 instruction:", step0?.instruction, "waypoint:", step0?.waypoint);
+
       const now = Date.now();
       // Don't repeat the same instruction within 3 seconds
       if (now - lastInstructionAtRef.current < 3000) return;
@@ -169,6 +172,7 @@ export default function ScanScreen() {
           step.waypoint.lat,
           step.waypoint.lon
         );
+        console.log("Distance to waypoint:", dist);
         // Wait until within 25m of the waypoint before speaking the instruction
         if (dist > 25) return;
       }
@@ -177,12 +181,12 @@ export default function ScanScreen() {
       lastInstructionAtRef.current = now;
     };
 
-    if (steps.length === 0) {
-      Speech.speak(`Navigation started to ${activeRoute.destinationName}.`);
-    } else {
-      Speech.speak(`Navigation started to ${activeRoute.destinationName}. ${steps[0].instruction}`);
+    if (steps.length > 0) {
       nextStepIndexRef.current = 1;
       lastInstructionAtRef.current = Date.now();
+      setTimeout(() => {
+        Speech.speak(`Starting navigation to ${activeRoute.destinationName.split(",")[0]}. ${steps[0].instruction}`);
+      }, 500);
     }
 
     (async () => {
@@ -228,18 +232,10 @@ export default function ScanScreen() {
           lastLoggedErrorRef.current = null;
           const detection = detections[0] ?? null;
           if (!detection) return;
-
-          // Only announce crosswalk signals near upcoming turns when navigating
-          if (activeRouteRef.current) {
-            if (!shouldAnnounceCrosswalkAtTurn()) return;
-            const crosswalkSignal = detections.find(isCrosswalkSignalDetection);
-            if (!crosswalkSignal) return;
-            setLast(crosswalkSignal);
-            speakDetection(crosswalkSignal, verbosity);
-            return;
-          }
-
           setLast(detection);
+          const isNavigating = activeRouteRef.current !== null;
+          const isSpeakingNow = await Speech.isSpeakingAsync();
+          if (isNavigating && isSpeakingNow) return;
           speakDetection(detection, verbosity);
         } catch (error) {
           const uiMessage = describeDetectionBackendError(error);

@@ -3,8 +3,8 @@ import { Audio } from "expo-av";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import * as Speech from "expo-speech";
-import { useEffect, useState } from "react";
-import { FlatList, Pressable, StyleSheet } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -66,6 +66,14 @@ export default function NavigateScreen() {
   const [loadingRoute, setLoadingRoute] = useState(false);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [currentAnnouncedIndex, setCurrentAnnouncedIndex] = useState<number>(-1);
+  const [isAnnouncing, setIsAnnouncing] = useState(false);
+
+  // Refs for announcement cycle
+  const announceCycleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentIndexRef = useRef<number>(-1);
+  const resultsRef = useRef<NominatimResult[]>([]);
+  const isAnnouncingRef = useRef(false);
 
   useEffect(() => {
     Speech.speak("Hold the button and say where you want to go.");
@@ -73,8 +81,7 @@ export default function NavigateScreen() {
     (async () => {
       await Audio.requestPermissionsAsync();
 
-      const { status } =
-        await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         console.warn("Location permission denied");
         return;
@@ -83,7 +90,58 @@ export default function NavigateScreen() {
       const loc = await Location.getCurrentPositionAsync({});
       setUserLocation(loc);
     })();
+
+    return () => {
+      stopAnnouncementCycle();
+    };
   }, []);
+
+  function stopAnnouncementCycle() {
+    if (announceCycleRef.current) {
+      clearTimeout(announceCycleRef.current);
+      announceCycleRef.current = null;
+    }
+    isAnnouncingRef.current = false;
+    setIsAnnouncing(false);
+    Speech.stop();
+  }
+
+  function announceNext(items: NominatimResult[], index: number) {
+    if (!isAnnouncingRef.current || items.length === 0) return;
+
+    const wrappedIndex = index % items.length;
+    currentIndexRef.current = wrappedIndex;
+    setCurrentAnnouncedIndex(wrappedIndex);
+
+    const parts = items[wrappedIndex].display_name.split(",");
+    const name = parts[0];
+    const street = parts[2]?.trim() ?? "";
+    const neighborhood = parts[3]?.trim() ?? "";
+    const city = parts[4]?.trim() ?? "";
+    const locationDetail = [street, neighborhood, city].filter(Boolean).join(", ");
+    Speech.stop();
+    Speech.speak(`Option ${wrappedIndex + 1}: ${name}${locationDetail ? `, ${locationDetail}` : ""}.`, {
+      onDone: () => {
+        if (!isAnnouncingRef.current) return;
+        // Pause 3 seconds then announce the next one
+        announceCycleRef.current = setTimeout(() => {
+          announceNext(items, wrappedIndex + 1);
+        }, 3000);
+      },
+    });
+  }
+
+  function startAnnouncementCycle(items: NominatimResult[]) {
+    stopAnnouncementCycle();
+    if (items.length === 0) {
+      Speech.speak("No locations found. Please try again.");
+      return;
+    }
+    isAnnouncingRef.current = true;
+    setIsAnnouncing(true);
+    resultsRef.current = items;
+    announceNext(items, 0);
+  }
 
   async function startListening() {
     if (recording) {
@@ -95,7 +153,10 @@ export default function NavigateScreen() {
       setRecording(null);
     }
 
+    stopAnnouncementCycle();
     setResults([]);
+    setQuery("");
+    setCurrentAnnouncedIndex(-1);
 
     const { status } = await Audio.requestPermissionsAsync();
     if (status !== "granted") {
@@ -153,7 +214,7 @@ export default function NavigateScreen() {
     try {
       const spokenText = await sendAudioToBackend(recordingUri);
       setQuery(spokenText);
-      await searchPlaces(spokenText);
+      await handleSearch(spokenText);
     } catch (error) {
       console.error("Voice input error:", error);
       Speech.speak("Sorry, I couldn't understand that. Please try again.");
@@ -188,8 +249,9 @@ export default function NavigateScreen() {
     return data.text;
   }
 
-  async function searchPlaces(text: string) {
-    if (!userLocation) return;
+  async function handleSearch(overrideQuery?: string) {
+    const activeQuery = overrideQuery ?? query;
+    if (!activeQuery || !userLocation) return;
 
     const { latitude, longitude } = userLocation.coords;
     const left = longitude - 0.1;
@@ -199,7 +261,7 @@ export default function NavigateScreen() {
 
     const url =
       `https://nominatim.openstreetmap.org/search` +
-      `?q=${encodeURIComponent(text)}` +
+      `?q=${encodeURIComponent(activeQuery)}` +
       `&format=json&addressdetails=1&limit=5` +
       `&viewbox=${left},${top},${right},${bottom}` +
       `&bounded=1`;
@@ -214,20 +276,33 @@ export default function NavigateScreen() {
 
       if (!response.ok) {
         console.error(`Nominatim failed (${response.status})`);
-        setResults([]);
+        Speech.speak("Search failed. Please try again.");
         return;
       }
 
       const data: unknown = await response.json();
       if (!Array.isArray(data)) {
-        setResults([]);
+        Speech.speak("No results found. Please try again.");
         return;
       }
 
-      setResults(data.filter(isNominatimResult));
+      const filtered = data.filter(isNominatimResult);
+      setResults(filtered);
+      Speech.speak(`Searching for ${activeQuery}`, {
+        onDone: () => startAnnouncementCycle(filtered),
+      });
     } catch (error) {
-      console.error("Nominatim error:", error);
-      setResults([]);
+      console.error("Search error:", error);
+      Speech.speak("Search failed. Please try again.");
+    }
+  }
+
+  function handleScreenTap() {
+    if (!isAnnouncing || currentIndexRef.current < 0) return;
+    const selected = resultsRef.current[currentIndexRef.current];
+    if (selected) {
+      stopAnnouncementCycle();
+      selectLocation(selected);
     }
   }
 
@@ -239,7 +314,6 @@ export default function NavigateScreen() {
     if (Array.isArray(routes) && routes.length > 0) {
       const firstRoute = routes[0] as Record<string, unknown>;
 
-      // Decode polyline string into coordinate array if needed
       let geometry = firstRoute.geometry;
       if (typeof geometry === "string") {
         const decoded = polyline.decode(geometry);
@@ -253,7 +327,6 @@ export default function NavigateScreen() {
       return isPrimaryRoute(route) ? route : null;
     }
 
-    // Falling back to GeoJSON feature collection format
     const features = root.features;
     if (Array.isArray(features) && features.length > 0) {
       const firstFeature = features[0] as Record<string, unknown>;
@@ -285,25 +358,21 @@ export default function NavigateScreen() {
       return;
     }
 
+    const shortName = item.display_name.split(",")[0];
+
     try {
       setLoadingRoute(true);
       const response = await fetchWithTimeout(API_ENDPOINTS.route, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          startLon,
-          startLat,
-          endLon,
-          endLat,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startLon, startLat, endLon, endLat }),
         timeoutMs: 10000,
       });
 
       if (!response.ok) {
         const errorText = await response.text();
         console.error("Route backend error:", errorText);
+        Speech.speak("Sorry, I could not find a route.");
         return;
       }
 
@@ -331,12 +400,12 @@ export default function NavigateScreen() {
         })
         .filter((step: RouteStep) => step.instruction.length > 0);
 
-      Speech.speak("Starting navigation");
       startRoute(item.display_name, steps);
       router.back();
 
     } catch (error) {
       console.error("Routing error:", error);
+      Speech.speak("Sorry, something went wrong. Please try again.");
     } finally {
       setLoadingRoute(false);
     }
@@ -344,56 +413,123 @@ export default function NavigateScreen() {
 
   return (
     <ThemedView style={styles.container} pointerEvents="auto">
-      <Pressable
-        style={[styles.mic, listening && styles.active]}
-        onPressIn={startListening}
-        onPressOut={stopListening}
-        accessibilityRole="button"
-        accessibilityLabel={listening ? "Recording destination" : "Hold to record destination"}
-        accessibilityHint="Hold to speak your destination, then release to search places"
-      >
-        <ThemedText>
-          {listening ? "Listening..." : "Hold to Speak"}
-        </ThemedText>
-      </Pressable>
 
-      {query !== "" && (
-        <ThemedText>Searching for: "{query}"</ThemedText>
-      )}
+      <View style={styles.splitContainer}>
+        {/* Hold to speak button */}
+        <Pressable
+          style={[styles.mic, listening && styles.active]}
+          onPressIn={startListening}
+          onPressOut={stopListening}
+          accessibilityRole="button"
+          accessibilityLabel={listening ? "Recording destination" : "Hold to record destination"}
+          accessibilityHint="Hold to speak your destination, then release to search places"
+        >
+          <ThemedText style={styles.micText}>
+            {listening ? "Listening..." : "Hold to Speak"}
+          </ThemedText>
+        </Pressable>
 
-      <FlatList
-        data={results}
-        keyExtractor={(item) => item.place_id.toString()}
-        renderItem={({ item }) => (
+        {/* Tap anywhere to select current announcement */}
+        {(isAnnouncing || loadingRoute) ? (
           <Pressable
-            style={styles.item}
-            onPress={() => selectLocation(item)}
-            disabled={loadingRoute}
+            style={styles.tapArea}
+            onPress={handleScreenTap}
             accessibilityRole="button"
-            accessibilityLabel={`Navigate to ${item.display_name}`}
-            accessibilityHint="Starts walking navigation to this destination"
+            accessibilityLabel="Tap to select current location"
           >
-            <ThemedText>{item.display_name}</ThemedText>
+            {loadingRoute ? (
+            <ThemedText style={styles.tapAreaTitle}>Loading route...</ThemedText>
+          ) : (
+            <>
+              <ThemedText style={styles.tapAreaTitle}>
+                {currentAnnouncedIndex >= 0 && results[currentAnnouncedIndex]
+                  ? results[currentAnnouncedIndex].display_name.split(",")[0]
+                  : "Listening..."}
+              </ThemedText>
+              <ThemedText style={styles.tapAreaHint}>
+                {currentAnnouncedIndex >= 0 && results[currentAnnouncedIndex]
+                  ? [results[currentAnnouncedIndex].display_name.split(",")[2]?.trim(), results[currentAnnouncedIndex].display_name.split(",")[3]?.trim(), results[currentAnnouncedIndex].display_name.split(",")[4]?.trim()].filter(Boolean).join(", ")
+                  : ""}
+              </ThemedText>
+            </>
+          )}
           </Pressable>
+        ) : (
+          <View style={styles.tapAreaPlaceholder} />
         )}
-      />
+      </View>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
+  container: {
+    flex: 1,
+    padding: 16,
+    paddingBottom: 0,
+    gap: 16,
+  },
   mic: {
-    marginVertical: 20,
-    padding: 20,
     borderRadius: 12,
     backgroundColor: palette.navMicIdle,
     alignItems: "center",
+    justifyContent: "center",
+    height: '47%',
   },
-  active: { backgroundColor: palette.navMicActive },
-  item: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderColor: palette.navDivider,
+  splitContainer: {
+    flex: 1,
+    gap: 16,
+    paddingBottom: 16,
+  },
+  tapAreaPlaceholder: {
+    height: '47%',
+  },
+  active: {
+    backgroundColor: palette.navMicActive,
+  },
+  micText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: palette.textDark,
+  },
+  searchButton: {
+    padding: 24,
+    borderRadius: 12,
+    backgroundColor: palette.primary,
+    alignItems: "center",
+  },
+  searchButtonText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "white",
+  },
+  tapArea: {
+    borderRadius: 16,
+    backgroundColor: palette.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    gap: 12,
+    height: '47%',
+  },
+  tapAreaTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "white",
+    textAlign: "center",
+  },
+  tapAreaHint: {
+    fontSize: 16,
+    color: "white",
+    opacity: 0.8,
+    textAlign: "center",
+  },
+  loadingContainer: {
+    alignItems: "center",
+    padding: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: palette.primary,
   },
 });
