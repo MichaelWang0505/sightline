@@ -10,7 +10,7 @@ import {
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { API_BASE_URL, USE_MOCK_DETECTOR } from "@/constants/api";
+import { USE_MOCK_DETECTOR } from "@/constants/api";
 import { AppPalette } from "@/constants/theme";
 
 import { useRouteSession } from "@/lib/route-session";
@@ -52,7 +52,6 @@ export default function ScanScreen() {
   const [currentDetections, setCurrentDetections] = useState<Detection[]>([]);
   const [lastBackendError, setLastBackendError] = useState<string | null>(null);
 
-  // Refs hold values that survive re-renders without triggering them
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const routeWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const nextStepIndexRef = useRef(0);
@@ -97,38 +96,6 @@ export default function ScanScreen() {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  function isTurnInstruction(instruction: string): boolean {
-    const normalized = instruction.toLowerCase();
-    return /(turn|left|right|slight|bear|u-turn|roundabout)/.test(normalized);
-  }
-
-  function isCrosswalkSignalDetection(detection: Detection): boolean {
-    return detection.signType === "WALK" || detection.label === "Don't walk signal";
-  }
-
-  function shouldAnnounceCrosswalkAtTurn(): boolean {
-    const route = activeRouteRef.current;
-    if (!route) return false;
-
-    const step = route.steps[nextStepIndexRef.current];
-    if (!step) return false;
-    if (!isTurnInstruction(step.instruction)) return false;
-
-    if (!step.waypoint) return true;
-    const latest = latestLocationRef.current;
-    if (!latest) return false;
-
-    const distToTurn = haversineMeters(
-      latest.coords.latitude,
-      latest.coords.longitude,
-      step.waypoint.lat,
-      step.waypoint.lon
-    );
-
-    // Only announce crosswalk signals when within 35m of the upcoming turn
-    return distToTurn <= 35;
-  }
-
   useEffect(() => {
     activeRouteRef.current = activeRoute;
   }, [activeRoute]);
@@ -156,7 +123,6 @@ export default function ScanScreen() {
       console.log("Step 0 instruction:", step0?.instruction, "waypoint:", step0?.waypoint);
 
       const now = Date.now();
-      // Don't repeat the same instruction within 3 seconds
       if (now - lastInstructionAtRef.current < 3000) return;
       const stepIndex = nextStepIndexRef.current;
       if (stepIndex >= steps.length) {
@@ -173,7 +139,6 @@ export default function ScanScreen() {
           step.waypoint.lon
         );
         console.log("Distance to waypoint:", dist);
-        // Wait until within 25m of the waypoint before speaking the instruction
         if (dist > 25) return;
       }
       Speech.speak(step.instruction);
@@ -191,7 +156,7 @@ export default function ScanScreen() {
 
     (async () => {
       const sub = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.High, distanceInterval: 4, timeInterval: 2000 },
+        { accuracy: Location.Accuracy.High, distanceInterval: 2, timeInterval: 1000 },
         (location) => {
           speakNextStep(location);
         }
@@ -222,9 +187,12 @@ export default function ScanScreen() {
       if (cameraRef.current) {
         try {
           const photo = await cameraRef.current.takePictureAsync({ quality: 0.7 });
+          console.log("Photo taken:", photo.uri);
+          console.log("Sending to backend...");
           const detections = usingMockDetector
             ? [mockDetect()]
             : await detectAllFromBackend(photo.uri);
+          console.log("Detections received:", detections);
           setCurrentDetections(detections);
           setLastBackendError(null);
           consecutiveFailuresRef.current = 0;
@@ -279,7 +247,6 @@ export default function ScanScreen() {
 
   function repeatLast() {
     if (!last) return;
-
     speakDetection(last, verbosity);
   }
 
@@ -301,19 +268,23 @@ export default function ScanScreen() {
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: "#ffffff" }]}>
+
+      {/* Header */}
       <View style={styles.header}>
-        <Image
-          source={require("@/assets/images/logo.png")}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Image
-          source={require("@/assets/images/sightline-title.png")}
-          style={styles.titleImage}
-          resizeMode="contain"
-        />
+        <View style={styles.logoContainer}>
+          <Image
+            source={require("@/assets/images/logo.png")}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </View>
+        <View>
+          <ThemedText style={styles.appName}>Sightline</ThemedText>
+          <ThemedText style={styles.appSubtitle}>AUDIO NAVIGATION</ThemedText>
+        </View>
       </View>
 
+      {/* Scan button */}
       <Pressable
         style={[styles.button, scanning && styles.danger]}
         onPress={scanning ? stop : start}
@@ -323,27 +294,32 @@ export default function ScanScreen() {
         <ThemedText style={styles.buttonText}>
           {scanning ? "Stop Scanning" : "Start Scanning"}
         </ThemedText>
+        <ThemedText style={styles.buttonSubtext}>
+          {scanning ? "Tap to stop" : "Tap to detect signs"}
+        </ThemedText>
       </Pressable>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="defaultSemiBold" style={{ color: palette.textLight }}>
-          Scanner Status
-        </ThemedText>
-        <ThemedText style={{ color: palette.textLight }}>
+      {/* Status card */}
+      <View style={styles.card}>
+        <ThemedText style={styles.cardLabel}>SCANNER STATUS</ThemedText>
+        <ThemedText style={styles.cardValue}>
           {currentDetections.length > 0
             ? currentDetections.map((d) => `${d.label} — ${d.distance}`).join(" | ")
-            : "No detections yet."}
+            : "No detections yet"}
         </ThemedText>
         {lastBackendError ? (
-          <ThemedText style={{ color: "#ffd7d7" }}>
-            Detection backend error: {lastBackendError}
-          </ThemedText>
-        ) : null}
-        <ThemedText style={{ color: palette.textLight }}>
-          Source: {usingMockDetector ? "Mock detector" : `Backend (${API_BASE_URL})`}
-        </ThemedText>
-      </ThemedView>
+          <ThemedText style={styles.cardError}>{lastBackendError}</ThemedText>
+        ) : (
+          <View style={styles.statusRow}>
+            <View style={styles.statusDot} />
+            <ThemedText style={styles.statusText}>
+              {usingMockDetector ? "Mock detector" : "Backend connected"}
+            </ThemedText>
+          </View>
+        )}
+      </View>
 
+      {/* Action cards */}
       <View style={styles.row}>
         <Pressable
           style={styles.actionCard}
@@ -351,26 +327,23 @@ export default function ScanScreen() {
           accessibilityRole="button"
           accessibilityLabel="Repeat last announcement"
         >
-          <ThemedText style={styles.actionCardText}>
-            Repeat Last Announcement
-          </ThemedText>
+          <ThemedText style={styles.actionCardText}>Repeat Last</ThemedText>
         </Pressable>
 
         <Pressable
-          style={styles.actionCard}
+          style={[styles.actionCard, activeRoute ? styles.actionCardDanger : styles.actionCardAccent]}
           onPress={activeRoute ? endRoute : () => router.push("/navigate")}
           accessibilityRole="button"
           accessibilityLabel={activeRoute ? "End route" : "Start Navigation"}
         >
           <ThemedText style={styles.actionCardText}>
-            {activeRoute ? "End Route" : "Start Navigation"}
+            {activeRoute ? "End Route" : "Navigate"}
           </ThemedText>
         </Pressable>
       </View>
 
-      {/* Camera is hidden off-screen so it can capture frames without showing a preview */}
       <View style={{ height: 0, width: 0, overflow: "hidden" }}>
-        <CameraView ref={cameraRef} style={{ flex: 1 }} facing="back" />
+        <CameraView ref={cameraRef} style={{ flex: 1 }} facing="back" zoom={0.5}/>
       </View>
     </ThemedView>
   );
@@ -381,6 +354,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 22,
     gap: 16,
+    backgroundColor: "#ffffff",
   },
   header: {
     flexDirection: "row",
@@ -389,31 +363,85 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     gap: 12,
   },
-  logo: {
-    width: 80,
-    height: 80,
-    marginTop: -15,
-    borderRadius: 8,
+  logoContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: "#e8f0fd",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  card: {
-    padding: 24,
-    borderRadius: 18,
-    backgroundColor: palette.card,
-    gap: 8,
+  logo: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+  },
+  appName: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0d2140",
+    letterSpacing: 0.5,
+  },
+  appSubtitle: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#3a7cff",
+    letterSpacing: 1.5,
   },
   button: {
-    paddingVertical: 70,
+    paddingVertical: 60,
     borderRadius: 16,
     alignItems: "center",
-    backgroundColor: palette.primary,
+    backgroundColor: "#3a7cff",
+    gap: 4,
   },
   danger: {
     backgroundColor: palette.danger,
   },
   buttonText: {
     color: "white",
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700",
+  },
+  buttonSubtext: {
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 13,
+  },
+  card: {
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: "#0d2140",
+    gap: 6,
+  },
+  cardLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#4a90e8",
+    letterSpacing: 1,
+  },
+  cardValue: {
+    fontSize: 14,
+    color: "#ffffff",
+  },
+  cardError: {
+    fontSize: 13,
+    color: "#ffd7d7",
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#4ade80",
+  },
+  statusText: {
+    fontSize: 12,
+    color: "#4a90e8",
   },
   row: {
     flexDirection: "row",
@@ -422,23 +450,22 @@ const styles = StyleSheet.create({
   },
   actionCard: {
     flex: 1,
-    backgroundColor: palette.secondary,
+    backgroundColor: "#2d2f3e",
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
     padding: 16,
   },
+  actionCardAccent: {
+    backgroundColor: "#1e3a6e",
+  },
+  actionCardDanger: {
+    backgroundColor: "#D64545",
+  },
   actionCardText: {
     color: "white",
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "700",
     textAlign: "center",
   },
-  titleImage: {
-    height: 80,
-    width: 100,
-    marginLeft: -90,
-    flex: 1,
-  },
 });
-

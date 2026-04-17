@@ -5,6 +5,7 @@
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
+    "export-voice-recordings": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/export-voice-recordings.ps1",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",

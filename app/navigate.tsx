@@ -69,7 +69,6 @@ export default function NavigateScreen() {
   const [currentAnnouncedIndex, setCurrentAnnouncedIndex] = useState<number>(-1);
   const [isAnnouncing, setIsAnnouncing] = useState(false);
 
-  // Refs for announcement cycle
   const announceCycleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentIndexRef = useRef<number>(-1);
   const resultsRef = useRef<NominatimResult[]>([]);
@@ -123,7 +122,6 @@ export default function NavigateScreen() {
     Speech.speak(`Option ${wrappedIndex + 1}: ${name}${locationDetail ? `, ${locationDetail}` : ""}.`, {
       onDone: () => {
         if (!isAnnouncingRef.current) return;
-        // Pause 3 seconds then announce the next one
         announceCycleRef.current = setTimeout(() => {
           announceNext(items, wrappedIndex + 1);
         }, 3000);
@@ -287,9 +285,20 @@ export default function NavigateScreen() {
       }
 
       const filtered = data.filter(isNominatimResult);
-      setResults(filtered);
+      const sorted = filtered.sort((a, b) => {
+        const distA = Math.sqrt(
+          Math.pow(parseFloat(a.lat) - latitude, 2) +
+          Math.pow(parseFloat(a.lon) - longitude, 2)
+        );
+        const distB = Math.sqrt(
+          Math.pow(parseFloat(b.lat) - latitude, 2) +
+          Math.pow(parseFloat(b.lon) - longitude, 2)
+        );
+        return distA - distB;
+      });
+      setResults(sorted);
       Speech.speak(`Searching for ${activeQuery}`, {
-        onDone: () => startAnnouncementCycle(filtered),
+        onDone: () => startAnnouncementCycle(sorted),
       });
     } catch (error) {
       console.error("Search error:", error);
@@ -358,8 +367,6 @@ export default function NavigateScreen() {
       return;
     }
 
-    const shortName = item.display_name.split(",")[0];
-
     try {
       setLoadingRoute(true);
       const response = await fetchWithTimeout(API_ENDPOINTS.route, {
@@ -413,23 +420,29 @@ export default function NavigateScreen() {
 
   return (
     <ThemedView style={styles.container} pointerEvents="auto">
-
       <View style={styles.splitContainer}>
+
         {/* Hold to speak button */}
         <Pressable
-          style={[styles.mic, listening && styles.active]}
+          style={[styles.mic, listening && styles.micActive]}
           onPressIn={startListening}
           onPressOut={stopListening}
           accessibilityRole="button"
           accessibilityLabel={listening ? "Recording destination" : "Hold to record destination"}
           accessibilityHint="Hold to speak your destination, then release to search places"
         >
+          <View style={[styles.micIcon, listening && styles.micIconActive]}>
+            <ThemedText style={styles.micIconText}>🎙</ThemedText>
+          </View>
           <ThemedText style={styles.micText}>
             {listening ? "Listening..." : "Hold to Speak"}
           </ThemedText>
+          <ThemedText style={styles.micSubtext}>
+            {listening ? "Release when done" : "Say your destination"}
+          </ThemedText>
         </Pressable>
 
-        {/* Tap anywhere to select current announcement */}
+        {/* Options area */}
         {(isAnnouncing || loadingRoute) ? (
           <Pressable
             style={styles.tapArea}
@@ -438,25 +451,33 @@ export default function NavigateScreen() {
             accessibilityLabel="Tap to select current location"
           >
             {loadingRoute ? (
-            <ThemedText style={styles.tapAreaTitle}>Loading route...</ThemedText>
-          ) : (
-            <>
-              <ThemedText style={styles.tapAreaTitle}>
-                {currentAnnouncedIndex >= 0 && results[currentAnnouncedIndex]
-                  ? results[currentAnnouncedIndex].display_name.split(",")[0]
-                  : "Listening..."}
-              </ThemedText>
-              <ThemedText style={styles.tapAreaHint}>
-                {currentAnnouncedIndex >= 0 && results[currentAnnouncedIndex]
-                  ? [results[currentAnnouncedIndex].display_name.split(",")[2]?.trim(), results[currentAnnouncedIndex].display_name.split(",")[3]?.trim(), results[currentAnnouncedIndex].display_name.split(",")[4]?.trim()].filter(Boolean).join(", ")
-                  : ""}
-              </ThemedText>
-            </>
-          )}
+              <ThemedText style={styles.tapAreaTitle}>Loading route...</ThemedText>
+            ) : (
+              <>
+                <ThemedText style={styles.tapAreaTitle}>
+                  {currentAnnouncedIndex >= 0 && results[currentAnnouncedIndex]
+                    ? results[currentAnnouncedIndex].display_name.split(",")[0]
+                    : "Listening..."}
+                </ThemedText>
+                <ThemedText style={styles.tapAreaHint}>
+                  {currentAnnouncedIndex >= 0 && results[currentAnnouncedIndex]
+                    ? [
+                        results[currentAnnouncedIndex].display_name.split(",")[2]?.trim(),
+                        results[currentAnnouncedIndex].display_name.split(",")[3]?.trim(),
+                        results[currentAnnouncedIndex].display_name.split(",")[4]?.trim(),
+                      ].filter(Boolean).join(", ")
+                    : ""}
+                </ThemedText>
+                <View style={styles.tapPill}>
+                  <ThemedText style={styles.tapPillText}>Tap to select</ThemedText>
+                </View>
+              </>
+            )}
           </Pressable>
         ) : (
           <View style={styles.tapAreaPlaceholder} />
         )}
+
       </View>
     </ThemedView>
   );
@@ -467,69 +488,85 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     paddingBottom: 0,
-    gap: 16,
-  },
-  mic: {
-    borderRadius: 12,
-    backgroundColor: palette.navMicIdle,
-    alignItems: "center",
-    justifyContent: "center",
-    height: '47%',
+    backgroundColor: "#ffffff",
   },
   splitContainer: {
     flex: 1,
     gap: 16,
-    paddingBottom: 16,
+    paddingBottom: 24,
   },
-  tapAreaPlaceholder: {
-    height: '47%',
+  mic: {
+    borderRadius: 16,
+    backgroundColor: "#f0f4ff",
+    alignItems: "center",
+    justifyContent: "center",
+    height: "47%",
+    gap: 10,
+    borderWidth: 2,
+    borderColor: "#c8d8f8",
   },
-  active: {
-    backgroundColor: palette.navMicActive,
+  micActive: {
+    backgroundColor: "#ffe8e8",
+    borderColor: "#ffb3b3",
+  },
+  micIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#ffffff",
+    borderWidth: 2,
+    borderColor: "#3a7cff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micIconActive: {
+    borderColor: "#ff4444",
+  },
+  micIconText: {
+    fontSize: 24,
   },
   micText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700",
-    color: palette.textDark,
+    color: "#0d2140",
   },
-  searchButton: {
-    padding: 24,
-    borderRadius: 12,
-    backgroundColor: palette.primary,
-    alignItems: "center",
-  },
-  searchButtonText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "white",
+  micSubtext: {
+    fontSize: 13,
+    color: "#3a7cff",
   },
   tapArea: {
     borderRadius: 16,
-    backgroundColor: palette.secondary,
+    backgroundColor: "#2d2f3e",
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    gap: 12,
-    height: '47%',
+    gap: 10,
+    height: "47%",
   },
   tapAreaTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "700",
-    color: "white",
+    color: "#ffffff",
     textAlign: "center",
   },
   tapAreaHint: {
-    fontSize: 16,
-    color: "white",
-    opacity: 0.8,
+    fontSize: 14,
+    color: "#a0c4ff",
     textAlign: "center",
   },
-  loadingContainer: {
-    alignItems: "center",
-    padding: 16,
+  tapPill: {
+    marginTop: 6,
+    backgroundColor: "#3a7cff",
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 20,
   },
-  loadingText: {
-    fontSize: 16,
-    color: palette.primary,
+  tapPillText: {
+    fontSize: 13,
+    color: "#ffffff",
+    fontWeight: "600",
+  },
+  tapAreaPlaceholder: {
+    height: "47%",
   },
 });
