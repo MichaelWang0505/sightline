@@ -113,15 +113,10 @@ export default function ScanScreen() {
     const steps = activeRoute.steps;
     nextStepIndexRef.current = 0;
     lastInstructionAtRef.current = 0;
-    console.log("All steps:", JSON.stringify(steps, null, 2));
 
     const speakNextStep = async (location: Location.LocationObject) => {
       if (!activeRoute) return;
       latestLocationRef.current = location;
-      console.log("GPS update received, stepIndex:", nextStepIndexRef.current, "steps total:", steps.length);
-      const step0 = steps[nextStepIndexRef.current];
-      console.log("Step 0 instruction:", step0?.instruction, "waypoint:", step0?.waypoint);
-
       const now = Date.now();
       if (now - lastInstructionAtRef.current < 3000) return;
       const stepIndex = nextStepIndexRef.current;
@@ -138,7 +133,6 @@ export default function ScanScreen() {
           step.waypoint.lat,
           step.waypoint.lon
         );
-        console.log("Distance to waypoint:", dist);
         if (dist > 25) return;
       }
       Speech.speak(step.instruction);
@@ -157,9 +151,7 @@ export default function ScanScreen() {
     (async () => {
       const sub = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.High, distanceInterval: 2, timeInterval: 1000 },
-        (location) => {
-          speakNextStep(location);
-        }
+        (location) => { speakNextStep(location); }
       );
       routeWatcherRef.current = sub;
     })();
@@ -176,23 +168,16 @@ export default function ScanScreen() {
 
     timerRef.current = setInterval(async () => {
       if (processingRef.current) return;
-
       const now = Date.now();
-      if (now < backendCooldownUntilRef.current && !usingMockDetector) {
-        return;
-      }
-
+      if (now < backendCooldownUntilRef.current && !usingMockDetector) return;
       processingRef.current = true;
 
       if (cameraRef.current) {
         try {
           const photo = await cameraRef.current.takePictureAsync({ quality: 0.7 });
-          console.log("Photo taken:", photo.uri);
-          console.log("Sending to backend...");
           const detections = usingMockDetector
             ? [mockDetect()]
             : await detectAllFromBackend(photo.uri);
-          console.log("Detections received:", detections);
           setCurrentDetections(detections);
           setLastBackendError(null);
           consecutiveFailuresRef.current = 0;
@@ -208,19 +193,14 @@ export default function ScanScreen() {
         } catch (error) {
           const uiMessage = describeDetectionBackendError(error);
           setLastBackendError(uiMessage);
-
           if (lastLoggedErrorRef.current !== uiMessage) {
             console.warn("Sign detection request failed", error);
             lastLoggedErrorRef.current = uiMessage;
           }
-
           consecutiveFailuresRef.current += 1;
           if (!USE_MOCK_DETECTOR && consecutiveFailuresRef.current >= 3) {
-            const cooldownMs = 30000;
-            backendCooldownUntilRef.current = Date.now() + cooldownMs;
-            setLastBackendError(
-              "Detection backend is failing repeatedly. Pausing requests for 30 seconds for diagnostics."
-            );
+            backendCooldownUntilRef.current = Date.now() + 30000;
+            setLastBackendError("Detection backend is failing repeatedly. Pausing requests for 30 seconds for diagnostics.");
             consecutiveFailuresRef.current = 0;
           }
         } finally {
@@ -298,26 +278,6 @@ export default function ScanScreen() {
           {scanning ? "Tap to stop" : "Tap to detect signs"}
         </ThemedText>
       </Pressable>
-
-      {/* Status card */}
-      <View style={styles.card}>
-        <ThemedText style={styles.cardLabel}>SCANNER STATUS</ThemedText>
-        <ThemedText style={styles.cardValue}>
-          {currentDetections.length > 0
-            ? currentDetections.map((d) => `${d.label} — ${d.distance}`).join(" | ")
-            : "No detections yet"}
-        </ThemedText>
-        {lastBackendError ? (
-          <ThemedText style={styles.cardError}>{lastBackendError}</ThemedText>
-        ) : (
-          <View style={styles.statusRow}>
-            <View style={styles.statusDot} />
-            <ThemedText style={styles.statusText}>
-              {usingMockDetector ? "Mock detector" : "Backend connected"}
-            </ThemedText>
-          </View>
-        )}
-      </View>
 
       {/* Action cards */}
       <View style={styles.row}>
@@ -407,42 +367,6 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.75)",
     fontSize: 13,
   },
-  card: {
-    padding: 20,
-    borderRadius: 16,
-    backgroundColor: "#0d2140",
-    gap: 6,
-  },
-  cardLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#4a90e8",
-    letterSpacing: 1,
-  },
-  cardValue: {
-    fontSize: 14,
-    color: "#ffffff",
-  },
-  cardError: {
-    fontSize: 13,
-    color: "#ffd7d7",
-  },
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 4,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#4ade80",
-  },
-  statusText: {
-    fontSize: 12,
-    color: "#4a90e8",
-  },
   row: {
     flexDirection: "row",
     gap: 14,
@@ -450,17 +374,17 @@ const styles = StyleSheet.create({
   },
   actionCard: {
     flex: 1,
-    backgroundColor: "#2d2f3e",
+    backgroundColor: "#6b7280",      
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
     padding: 16,
   },
   actionCardAccent: {
-    backgroundColor: "#1e3a6e",
+    backgroundColor: "#5b8dee",      
   },
   actionCardDanger: {
-    backgroundColor: "#D64545",
+    backgroundColor: "#f87171",      
   },
   actionCardText: {
     color: "white",
