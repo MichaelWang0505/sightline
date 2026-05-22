@@ -2,7 +2,7 @@ import * as Location from "expo-location";
 import * as Speech from "expo-speech";
 import { useEffect, useRef, useState } from "react";
 import {
-  Image,
+  ImageBackground,
   Pressable,
   StyleSheet,
   View,
@@ -236,9 +236,9 @@ export default function ScanScreen() {
 
   if (!permission.granted) {
     return (
-      <ThemedView style={[styles.container, { backgroundColor: "#ffffff" }]}>
+      <ThemedView style={[styles.container, { backgroundColor: "#0d2140" }]}>
         <View style={styles.header}>
-          <ThemedText type="title" style={{ color: palette.textDark }}>
+          <ThemedText type="title" style={{ color: "#ffffff" }}>
             Please Grant Camera Permission
           </ThemedText>
         </View>
@@ -247,113 +247,104 @@ export default function ScanScreen() {
   }
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: "#ffffff" }]}>
+    <ImageBackground
+      source={require("@/assets/images/background.png")}
+      style={styles.container}
+      resizeMode="cover"
+    >
+      <View style={styles.overlay}>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.logoContainer}>
-          <Image
-            source={require("@/assets/images/logo.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <ThemedText style={styles.appName}>Sightline</ThemedText>
+            <ThemedText style={styles.appSubtitle}>AUDIO NAVIGATION</ThemedText>
+          </View>
         </View>
-        <View>
-          <ThemedText style={styles.appName}>Sightline</ThemedText>
-          <ThemedText style={styles.appSubtitle}>AUDIO NAVIGATION</ThemedText>
-        </View>
-      </View>
 
-      {/* Scan button */}
-      <Pressable
-        style={[styles.button, scanning && styles.danger]}
-        onPress={scanning ? stop : start}
-        accessibilityRole="button"
-        accessibilityLabel={scanning ? "Stop scanning" : "Start scanning"}
-      >
-        <ThemedText style={styles.buttonText}>
-          {scanning ? "Stop Scanning" : "Start Scanning"}
-        </ThemedText>
-        <ThemedText style={styles.buttonSubtext}>
-          {scanning ? "Tap to stop" : "Tap to detect signs"}
-        </ThemedText>
-      </Pressable>
-
-      {/* Action cards */}
-      <View style={styles.row}>
+        {/* Scan button */}
         <Pressable
-          style={styles.actionCard}
-          onPress={repeatLast}
+          style={[styles.button, scanning && styles.danger]}
+          onPress={scanning ? stop : start}
           accessibilityRole="button"
-          accessibilityLabel="Repeat last announcement"
+          accessibilityLabel={scanning ? "Stop scanning" : "Start scanning"}
         >
-          <ThemedText style={styles.actionCardText}>Repeat Last</ThemedText>
-        </Pressable>
-
-        <Pressable
-          style={[styles.actionCard, activeRoute ? styles.actionCardDanger : styles.actionCardAccent]}
-          onPress={activeRoute ? endRoute : () => router.push("/navigate")}
-          accessibilityRole="button"
-          accessibilityLabel={activeRoute ? "End route" : "Start Navigation"}
-        >
-          <ThemedText style={styles.actionCardText}>
-            {activeRoute ? "End Route" : "Navigate"}
+          <ThemedText style={styles.buttonText}>
+            {scanning ? "Stop Scanning" : "Start Scanning"}
+          </ThemedText>
+          <ThemedText style={styles.buttonSubtext}>
+            {scanning ? "Tap to stop" : "Tap to detect signs"}
           </ThemedText>
         </Pressable>
-      </View>
 
-      <View style={{ height: 0, width: 0, overflow: "hidden" }}>
-        <CameraView ref={cameraRef} style={{ flex: 1 }} facing="back" zoom={0.5}/>
+        {/* Action cards */}
+        <View style={styles.row}>
+          <Pressable
+            style={styles.actionCard}
+            onPress={repeatLast}
+            accessibilityRole="button"
+            accessibilityLabel="Repeat last announcement"
+          >
+            <ThemedText style={styles.actionCardText}>Repeat Last</ThemedText>
+          </Pressable>
+
+          <Pressable
+            style={[styles.actionCard, activeRoute ? styles.actionCardDanger : styles.actionCardAccent]}
+            onPress={activeRoute ? endRoute : () => router.push("/navigate")}
+            accessibilityRole="button"
+            accessibilityLabel={activeRoute ? "End route" : "Start Navigation"}
+          >
+            <ThemedText style={styles.actionCardText}>
+              {activeRoute ? "End Route" : "Navigate"}
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        <View style={{ height: 0, width: 0, overflow: "hidden" }}>
+          <CameraView ref={cameraRef} style={{ flex: 1 }} facing="back" zoom={0.5}/>
+        </View>
+
       </View>
-    </ThemedView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  overlay: {
+    flex: 1,
     padding: 22,
+    paddingTop:60,
     gap: 16,
-    backgroundColor: "#ffffff",
+    backgroundColor: "rgba(0,0,0,0.45)",
   },
   header: {
-    flexDirection: "row",
     alignItems: "center",
-    paddingTop: 40,
     paddingBottom: 10,
-    gap: 12,
-  },
-  logoContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: "#e8f0fd",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logo: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
   },
   appName: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#0d2140",
-    letterSpacing: 0.5,
+    fontSize: 42,
+    fontWeight: "900",
+    color: "#ffffff",
+    letterSpacing: 6,
+    paddingTop: 20
   },
   appSubtitle: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "600",
-    color: "#3a7cff",
-    letterSpacing: 1.5,
+    color: "#90c0ff",
+    letterSpacing: 3,
   },
   button: {
-    paddingVertical: 60,
+    paddingVertical: 130,
     borderRadius: 16,
     alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#3a7cff",
     gap: 4,
+    marginTop: -10
   },
   danger: {
     backgroundColor: palette.danger,
@@ -374,17 +365,17 @@ const styles = StyleSheet.create({
   },
   actionCard: {
     flex: 1,
-    backgroundColor: "#6b7280",      
+    backgroundColor: "rgba(107,114,128,0.8)",
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    padding: 16,
+    padding: 10,
   },
   actionCardAccent: {
-    backgroundColor: "#5b8dee",      
+    backgroundColor: "rgba(91,141,238,0.8)",
   },
   actionCardDanger: {
-    backgroundColor: "#f87171",      
+    backgroundColor: "rgba(248,113,113,0.8)",
   },
   actionCardText: {
     color: "white",
