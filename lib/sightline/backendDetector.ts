@@ -15,6 +15,9 @@ type Mapping = {
   signType: SignType;
   label: string;
   meaning?: string;
+  omitDistance?: boolean;
+  includeMeaning?: boolean;
+  includeDirection?: boolean;
 };
 
 type RankedDetection = Detection & {
@@ -27,41 +30,49 @@ const SIGN_MAP: Record<string, Mapping> = {
     signType: "EXIT",
     label: SIGN_LABELS.EXIT.label,
     meaning: SIGN_LABELS.EXIT.meaning,
+    includeDirection: SIGN_LABELS.EXIT.includeDirection,
   },
   exit_right: {
     signType: "EXIT_RIGHT",
     label: SIGN_LABELS.EXIT_RIGHT.label,
     meaning: SIGN_LABELS.EXIT_RIGHT.meaning,
+    includeDirection: SIGN_LABELS.EXIT_RIGHT.includeDirection,
   },
   exit_left: {
     signType: "EXIT_LEFT",
     label: SIGN_LABELS.EXIT_LEFT.label,
     meaning: SIGN_LABELS.EXIT_LEFT.meaning,
+    includeDirection: SIGN_LABELS.EXIT_LEFT.includeDirection,
   },
   exit_both_ways: {
     signType: "EXIT_BOTH",
     label: SIGN_LABELS.EXIT_BOTH.label,
     meaning: SIGN_LABELS.EXIT_BOTH.meaning,
+    includeDirection: SIGN_LABELS.EXIT_BOTH.includeDirection,
   },
   crosswalk: {
     signType: "PEDESTRIAN_CROSSING",
-    label: "Crosswalk",
-    meaning: "Crosswalk ahead.",
+    label: SIGN_LABELS.PEDESTRIAN_CROSSING.label,
+    meaning: SIGN_LABELS.PEDESTRIAN_CROSSING.meaning,
   },
   school_crosswalk: {
-    signType: "PEDESTRIAN_CROSSING",
-    label: "School crosswalk",
-    meaning: "School crosswalk area ahead.",
+    signType: "SCHOOL_CROSSING",
+    label: SIGN_LABELS.SCHOOL_CROSSING.label,
+    meaning: SIGN_LABELS.SCHOOL_CROSSING.meaning,
   },
   walk_on: {
-    signType: "WALK",
-    label: "Walk signal",
-    meaning: "Walk signal is on.",
+    signType: "WALK_ON",
+    label: SIGN_LABELS.WALK_ON.label,
+    meaning: SIGN_LABELS.WALK_ON.meaning,
+    omitDistance: SIGN_LABELS.WALK_ON.omitDistance,
+    includeMeaning: SIGN_LABELS.WALK_ON.includeMeaning,
   },
   walk_off: {
-    signType: "STOP",
-    label: "Don't walk signal",
-    meaning: "Wait. Do not cross now.",
+    signType: "WALK_OFF",
+    label: SIGN_LABELS.WALK_OFF.label,
+    meaning: SIGN_LABELS.WALK_OFF.meaning,
+    omitDistance: SIGN_LABELS.WALK_OFF.omitDistance,
+    includeMeaning: SIGN_LABELS.WALK_OFF.includeMeaning,
   },
 };
 
@@ -100,6 +111,18 @@ function mapEntryToRankedDetection(
 
   if (mapped.meaning) {
     base.meaning = mapped.meaning;
+  }
+
+  if (mapped.omitDistance) {
+    base.omitDistance = true;
+  }
+
+  if (mapped.includeMeaning) {
+    base.includeMeaning = true;
+  }
+
+  if (mapped.includeDirection && signData.direction) {
+    base.direction = signData.direction;
   }
 
   return {

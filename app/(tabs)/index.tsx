@@ -17,7 +17,7 @@ import { useRouteSession } from "@/lib/route-session";
 import { detectAllFromBackend } from "@/lib/sightline/backendDetector";
 import { mockDetect } from "@/lib/sightline/mockDetector";
 import { speakDetection } from "@/lib/sightline/speak";
-import type { Detection, Verbosity } from "@/lib/sightline/types";
+import type { Detection } from "@/lib/sightline/types";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 
@@ -47,7 +47,6 @@ export default function ScanScreen() {
   const { activeRoute, endRoute } = useRouteSession();
 
   const [scanning, setScanning] = useState(false);
-  const [verbosity] = useState<Verbosity>("medium");
   const [last, setLast] = useState<Detection | null>(null);
   const [currentDetections, setCurrentDetections] = useState<Detection[]>([]);
   const [lastBackendError, setLastBackendError] = useState<string | null>(null);
@@ -189,7 +188,7 @@ export default function ScanScreen() {
           const isNavigating = activeRouteRef.current !== null;
           const isSpeakingNow = await Speech.isSpeakingAsync();
           if (isNavigating && isSpeakingNow) return;
-          speakDetection(detection, verbosity);
+          speakDetection(detection);
         } catch (error) {
           const uiMessage = describeDetectionBackendError(error);
           setLastBackendError(uiMessage);
@@ -227,7 +226,7 @@ export default function ScanScreen() {
 
   function repeatLast() {
     if (!last) return;
-    speakDetection(last, verbosity);
+    speakDetection(last);
   }
 
   if (!permission) {

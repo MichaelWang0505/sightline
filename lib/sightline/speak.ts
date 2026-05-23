@@ -1,14 +1,18 @@
 import * as Speech from "expo-speech";
-import { Detection, Verbosity } from "./types";
+import { Detection } from "./types";
 
-export function speakDetection(detection: Detection, verbosity: Verbosity) {
+export function speakDetection(detection: Detection) {
   let message = `${detection.label} ahead`;
 
-  if (detection.distance !== "unknown") {
+  if (!detection.omitDistance && detection.distance !== "unknown") {
     message += `, ${detection.distance} away`;
   }
 
-  if (verbosity !== "low" && detection.meaning) {
+  if (detection.direction) {
+    message += `, on your ${detection.direction}`;
+  }
+
+  if (detection.includeMeaning && detection.meaning) {
     message += `. ${detection.meaning}`;
   }
 

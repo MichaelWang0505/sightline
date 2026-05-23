@@ -3,13 +3,13 @@ import { Detection, SignType } from "./types";
 
 const SIGNS: SignType[] = [
   "PEDESTRIAN_CROSSING",
+  "SCHOOL_CROSSING",
   "EXIT",
   "EXIT_RIGHT",
   "EXIT_LEFT",
   "EXIT_BOTH",
-  "WALK",
-  "STOP",
-  "TRAFFIC_LIGHT",
+  "WALK_ON",
+  "WALK_OFF",
 ];
 
 const DISTANCES = [
@@ -32,6 +32,8 @@ export function mockDetect(): Detection {
     label: signInfo.label,
     meaning: signInfo.meaning,
     distance: DISTANCES[Math.floor(Math.random() * DISTANCES.length)],
+    omitDistance: signInfo.omitDistance,
+    includeMeaning: signInfo.includeMeaning,
     confidence: Math.random() * 0.4 + 0.6,
     createdAt: Date.now(),
   };

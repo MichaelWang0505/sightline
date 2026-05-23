@@ -3,13 +3,13 @@ export type Verbosity = "low" | "medium" | "high";
 
 export type SignType =
   | "PEDESTRIAN_CROSSING"
+  | "SCHOOL_CROSSING"
   | "EXIT"
   | "EXIT_RIGHT"
   | "EXIT_LEFT"
   | "EXIT_BOTH"
-  | "WALK"
-  | "STOP"
-  | "TRAFFIC_LIGHT";
+  | "WALK_ON"
+  | "WALK_OFF";
 
 export type DistancePhrase =
   | "very close"
@@ -25,6 +25,9 @@ export type Detection = {
   label: string;
   meaning?: string;
   distance: DistancePhrase;
+  omitDistance?: boolean;
+  includeMeaning?: boolean;
+  direction?: string;
   confidence: number;
   createdAt: number;
 };
